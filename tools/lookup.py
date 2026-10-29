@@ -9,7 +9,7 @@ The assistant runs this on its own, without waiting to be asked. Sources live in
   - <Label>: prs <owner/repo>                 PRs requesting the owner's review
   - Names: <login> <Name>, <login> <Name>     to refer to people by name
 
-  opening <root> <area>    memory.py's opening with the "Looked up now" block
+  opening <root> <area>    memory.py's opening with the "Looked up now" and review blocks
   owe     <root> <area>    what the owner owes: people, each source of the area and the rest
 """
 import datetime as dt
@@ -25,6 +25,7 @@ import memory as m  # noqa: E402
 DAYS_RECENT = 3
 DAYS_STALLED = 30
 OWE_ITEMS = 5
+REF = re.compile(r"(?<![\w/])(?:#|PR #?)(\d{2,})\b(?! \()")  # "#123", "PR 123"
 SOURCE = re.compile(r"^- ([^:]+): (issues|prs) (\S+/\S+)(?: label (.+))?$")
 
 
@@ -94,6 +95,35 @@ def look_up(source, me):
     return items
 
 
+def describer(area):
+    """Gives each "#123" in a text its title and state. The repository: the source named just before it
+    ("Support #12"), the PR sources after "PR", or else the sources in AREA.md order."""
+    found = sources(area)[0]
+    order = lambda repos: list(dict.fromkeys(repos))
+    cache = {}
+
+    def resolve(ref):
+        before = m.fold(ref.string[max(0, ref.start() - 30):ref.start()])
+        named = [repo for label, _, repo, _ in found if m.fold(label) in before]
+        prs = [repo for _, kind, repo, _ in found if kind == "prs"] if ref.group(0).startswith("PR") else []
+        n = ref.group(1)
+        for repo in order(named + prs + [repo for _, _, repo, _ in found]):
+            if (repo, n) not in cache:
+                try:
+                    it = gh("api", f"repos/{repo}/issues/{n}")
+                except NoGitHub:
+                    cache[repo, n] = None
+                    continue
+                merged = (it.get("pull_request") or {}).get("merged_at")
+                state = "merged" if merged else "open" if it["state"] == "open" else "closed"
+                cache[repo, n] = f"{title(it['title'], 45)} · {state}"
+            if cache[repo, n]:
+                return f"{ref.group(0)} ({cache[repo, n]})"
+        return ref.group(0)
+
+    return lambda text: REF.sub(resolve, text)
+
+
 def everything(area):
     """[(source, items)] for every source, and the names map. Raises NoGitHub if gh fails."""
     found, names = sources(area)
@@ -109,28 +139,30 @@ def line(it, label, names, today):
     return f"{m.short_date(it['when'], today)} · {source}#{it['n']} · {title(it['title'])} · {who} {it['action']}"
 
 
-def looked_up_block(area, today):
+def looked_up_blocks(area, today):
+    """What waits on the owner in the last days and every PR requesting their review, each with its title."""
     try:
         result, names = everything(area)
     except NoGitHub as e:
-        return f"**Looked up now:** couldn't check GitHub ({e})."
+        return [f"🔎 **Looked up now:** couldn't check GitHub ({e})."]
     if not result:
-        return None
-    new, reviews = [], 0
+        return []
+    new, reviews = [], []
     for (label, kind, _, _), items in result:
         if kind == "prs":
-            reviews += len(items)
+            reviews += items
             continue
         new += [(it, label) for it in items if it["waiting"] and (today - it["when"]).days <= DAYS_RECENT]
     new.sort(key=lambda x: x[0]["when"], reverse=True)
-    lines = [line(it, label, names, today) for it, label in new[:m.BLOCK_ITEMS]]
-    if len(new) > m.BLOCK_ITEMS:
-        lines.append(f"and {len(new) - m.BLOCK_ITEMS} more waiting on you")
+    reviews.sort(key=lambda it: it["when"])
+    tag = lambda it: f"#{it['n']} {title(it['title'], m.TAG_MAX)}"
+    blocks = [m.block("🔎 **Looked up now**", [line(it, label, names, today) for it, label in new],
+                      [tag(it) for it, _ in new]) if new
+              else f"🔎 **Looked up now:** nothing new waiting on you on GitHub in the last {DAYS_RECENT} days."]
     if reviews:
-        lines.append(f"{reviews} PR{'s' if reviews > 1 else ''} requesting your review")
-    if not lines:
-        return f"**Looked up now:** nothing new waiting on you on GitHub in the last {DAYS_RECENT} days."
-    return "\n".join(["**Looked up now**"] + [f"- {l}" for l in lines])
+        blocks.append(m.block(f"👀 **Requesting your review** ({len(reviews)})",
+                              [line(it, "", names, today) for it in reviews], [tag(it) for it in reviews]))
+    return blocks
 
 
 def owe(root, area):
@@ -145,13 +177,15 @@ def owe(root, area):
     blocks = [f"**What you owe · {m.area_title(area.name)}**"]
     if people:
         blocks.append(m.block(f"**People** ({len(people)})",
-                              [f"{due_of(it)}{it['for']} · {m.short(it['text'])}" for it in people], len(people)))
+                              [f"{due_of(it)}**{it['for']}** · {m.short(it['text'])}" for it in people],
+                              [m.tag(it["text"]) for it in people], OWE_ITEMS))
     else:
         blocks.append("**People:** nobody waiting on you, as far as the records go.")
     for (label, kind, _, _), items in result:
         if kind == "prs":
             lines = [line(it, "", names, today) for it in items]
-            blocks.append(m.block(f"**{label}** ({len(items)})", lines[:OWE_ITEMS], len(items)) if items
+            tags = [f"#{it['n']} {title(it['title'], m.TAG_MAX)}" for it in items]
+            blocks.append(m.block(f"**{label}** ({len(items)})", lines, tags, OWE_ITEMS) if items
                           else f"**{label}:** no PR requesting your review.")
             continue
         waiting = sorted((it for it in items if it["waiting"]), key=lambda it: it["when"], reverse=True)
@@ -159,12 +193,13 @@ def owe(root, area):
         heading = f"**{label}** ({len(items)}) · " + (f"{len(waiting)} waiting on you" if waiting else "none waiting on you")
         if stalled:
             heading += f" · {stalled} stalled for over {DAYS_STALLED} days"
-        blocks.append(m.block(heading, [line(it, "", names, today) for it in waiting[:OWE_ITEMS]], len(waiting)))
+        blocks.append(m.block(heading, [line(it, "", names, today) for it in waiting],
+                              [f"#{it['n']} {title(it['title'], m.TAG_MAX)}" for it in waiting], OWE_ITEMS))
     if error:
         blocks.append(f"**GitHub:** couldn't check ({error}).")
     if todos:
-        blocks.append(m.block(f"**Your other to-dos** ({len(todos)})",
-                              [f"{due_of(it)}{m.short(it['text'])}" for it in todos[:OWE_ITEMS]], len(todos)))
+        blocks.append(m.block(f"**Your other to-dos** ({len(todos)})", [f"{due_of(it)}{m.gist(it['text'])}" for it in todos],
+                              [m.tag(it["text"]) for it in todos], OWE_ITEMS))
     if waiting:
         blocks.append(f"**Waiting on you:** {waiting}")
     return "\n\n".join(blocks)
@@ -185,8 +220,7 @@ def main(argv):
     if argv[1] == "owe":
         print(owe(root, area))
         return 0
-    looked = looked_up_block(area, m.local_today())
-    print(m.opening(root, area, [looked] if looked else []))
+    print(m.opening(root, area, looked_up_blocks(area, m.local_today()), describer(area)))
     return 0
 
 

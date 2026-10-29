@@ -29,13 +29,15 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 DAYS_STALE = 14
 DAYS_AGED = 14
 DAYS_STATE = 3
 DAYS_OTHER_AREAS = 3
+DAYS_NEXT = 7  # due dates in the opening
+DAYS_AHEAD = 14  # with none in DAYS_NEXT, the first one up to here; further out only weighs on the screen
 BOARD_MAX_LINES = 80
 BOARD_MAX_BYTES = 9000
 INBOX_MAX = 15
@@ -44,8 +46,9 @@ BOARD_SECTIONS = ITEM_SECTIONS + ("Thread",)
 AGING_SECTIONS = ("Waiting on", "Questions for")
 CAPTURE_SECTIONS = ("Decisions", "State", "To-dos", "Preferences", "Thread")
 EMPTY = {"none", "nothing"}
-TEXT_MAX = 70
-BLOCK_ITEMS = 3
+TEXT_MAX = 100
+TAG_MAX = 30  # an item named in the "and N more" line
+BLOCK_ITEMS = 5
 AGENT_SEPARATOR = "----- agent only, do not show -----"
 PREFERENCES_MAX = 500  # words; read every session: for a rule to come in, another leaves or merges
 TOPIC_MAX = 800  # words; above it, sleep splits the topic
@@ -246,6 +249,27 @@ def board_item(title, line):
 
 def board_items(body):
     return [board_item(t, l) for t in ITEM_SECTIONS for l in section(body, t, prefix=True)]
+
+
+def words(text):
+    return {w for w in re.findall(r"\w+", fold(clean(text))) if len(w) > 2}
+
+
+def done_in_inbox(area):
+    """The words of each to-do a pending capture closes ("- Done: ..."): it prevails over the board."""
+    done = []
+    for f in area.inbox:
+        for l in section(read(f)[1], "To-dos"):
+            d = re.match(r"^- (?:done|dropped|resolved)\b:?\s*(.+)", l, re.I)
+            if d and len(words(d.group(1))) >= 3:  # fewer would close unrelated items
+                done.append(words(d.group(1)))
+    return done
+
+
+def closed(item, done):
+    """The capture names the item: most of its words are in the item's text (it often names it shorter)."""
+    w = words(item["text"])
+    return any(len(d & w) >= 0.8 * len(d) for d in done)
 
 
 def dates_in_text(text):
@@ -579,6 +603,17 @@ def short(text, limit=TEXT_MAX):
     return t[:1].upper() + t[1:]
 
 
+def gist(text):
+    """The gist for the screen, with the label ("Diego: ...") in bold."""
+    t = short(text)
+    label = re.match(r"^([^:*]{1,25}): ", t)
+    return f"**{label.group(1)}:** {t[label.end():]}" if label else t
+
+
+def tag(text):
+    return short(text, TAG_MAX)
+
+
 def short_date(d, today, approx=False):
     md = f"{MONTHS[d.month - 1]} {d.day}" + ("" if d.year == today.year else f", {d.year}")
     days = (d - today).days
@@ -612,9 +647,14 @@ def thread_and_waiting(board):
     return thread, waiting
 
 
-def block(title, lines, total):
-    rest = total - len(lines)
-    return "\n".join([title] + [f"- {l}" for l in lines] + ([f"- and {rest} more"] if rest > 0 else []))
+def block(title, lines, tags=(), limit=BLOCK_ITEMS):
+    """Up to `limit` lines; the rest named by their tags in one line, so nothing hides behind a number."""
+    rest = list(tags)[limit:len(lines)]
+    out = [title] + [f"- {l}" for l in lines[:limit]]
+    if len(lines) > limit:
+        named = f": {'; '.join(rest[:3])}" + ("; ..." if len(rest) > 3 else "") if rest else ""
+        out.append(f"- and {len(lines) - limit} more{named}")
+    return "\n".join(out)
 
 
 def series(version):
@@ -656,28 +696,34 @@ def pending(root):
     return 0
 
 
-def opening(root, area, extra=()):
+def opening(root, area, extra=(), describe=str):
     """The assistant's first reply, ready to show, computed now (local mode).
 
-    `extra`: ready blocks from other sources (lookup.py), placed after the due dates."""
+    `extra`: ready blocks from other sources (lookup.py), placed after the due dates.
+    `describe`: completes an item's text (lookup.py gives each "#123" its title)."""
     today = local_today()
     _, board = area.file("BOARD.md") or ({}, "")
     thread, waiting = thread_and_waiting(board)
-    mine = due_items(root, [area.name])
+    done = done_in_inbox(area)
+    waiting = [it for it in waiting if not closed(it, done)]
+    mine = [p for p in due_items(root, [area.name]) if not closed(p[3], done)]
     overdue = [p for p in mine if p[0] < today]
     upcoming = [p for p in mine if p[0] >= today]
-    week = [p for p in upcoming if (p[0] - today).days < 7] or upcoming[:1]
-    blocks = [f"**{area_title(area.name)}** · {thread or 'no thread in progress'}"]
+    week = ([p for p in upcoming if (p[0] - today).days < DAYS_NEXT]
+            or [p for p in upcoming[:1] if (p[0] - today).days <= DAYS_AHEAD])
+    day = f"{WEEKDAYS[today.weekday()]}, {MONTHS[today.month - 1]} {today.day}"
+    blocks = [f"**{area_title(area.name)}** · {day} · 🧵 {thread or 'no thread in progress'}"]
+    dated = lambda items: ([f"{short_date(d, today, a)} · {describe(gist(it['text']))}" for d, a, _, it in items],
+                           [tag(it["text"]) for *_, it in items])
     if overdue:
-        lines = [f"{short_date(d, today, a)} · {short(it['text'])}" for d, a, _, it in overdue[:BLOCK_ITEMS]]
-        blocks.append(block("**Overdue** (done, postpone or drop?)", lines, len(overdue)))
+        blocks.append(block("🔴 **Overdue** (done, postpone or drop?)", *dated(overdue)))
     if week:
-        lines = [f"{short_date(d, today, a)} · {short(it['text'])}" for d, a, _, it in week[:BLOCK_ITEMS]]
-        title = "**Next due**" if len(week) == 1 else "**Next due dates**"
-        blocks.append(block(title, lines, len(week)))
+        title = "📅 **Next due**" if len(week) == 1 else f"📅 **Next due dates** ({len(week)})"
+        blocks.append(block(title, *dated(week)))
     blocks += list(extra)
     if waiting:
-        blocks.append(block(f"**Waiting on you** ({len(waiting)})", [short(waiting[0]["text"])], 1))
+        blocks.append(block(f"⏳ **Waiting on you** ({len(waiting)})", [describe(gist(it["text"])) for it in waiting],
+                            [tag(it["text"]) for it in waiting]))
     limit = today + dt.timedelta(days=DAYS_OTHER_AREAS)
     others = [p for p in due_items(root, [n for n in areas(root) if n != area.name]) if p[0] <= limit]
     summary = []
@@ -690,7 +736,7 @@ def opening(root, area, extra=()):
                          else f"{len(soon)} due by {short_date(soon[-1][0], today, soon[-1][1])}")
         summary.append(f"{area_title(n)}, {' and '.join(parts)}")
     if summary:
-        blocks.append(f"**From other areas:** {'; '.join(summary)}")
+        blocks.append(f"🗂️ **From other areas:** {'; '.join(summary)}")
     reasons = sleep_reasons(root, area, inbox_min=INBOX_MAX + 1)
     notes = []
     repo = Path(__file__).resolve().parent.parent  # hooks only where someone set them; no repository in chat
@@ -708,7 +754,7 @@ def opening(root, area, extra=()):
         notes.append(f"memory at version {st[0]['system_version']}, newer than this system ({VERSION}): "
                      "update the repository (git pull) or reinstall the skill")
     if notes:
-        blocks.append(f"**Heads-up:** {'. '.join(n[:1].upper() + n[1:] for n in notes)}.")
+        blocks.append(f"⚠️ **Heads-up:** {'. '.join(n[:1].upper() + n[1:] for n in notes)}.")
     blocks.append("Which topic?")
     core = Area(root, "core").inbox
     agent = [AGENT_SEPARATOR,
@@ -727,8 +773,9 @@ def owed(area, others=()):
     known -= {"", fold(NAME)}
     _, board = area.file("BOARD.md") or ({}, "")
     people, todos, waiting = [], [], 0
+    done = done_in_inbox(area)
     for it in board_items(board):
-        if it["empty"]:
+        if it["empty"] or closed(it, done):
             continue
         owner = re.match(r"^\**([^:*]{1,40})\**:\s", it["text"])
         if owner and fold(owner.group(1)) in known:
@@ -753,7 +800,8 @@ def area_state(root, area):
            f"# State of area {area.name} (generated by sleep; do not edit)", "",
            f"## Opening (overdue = due before today; computed on {today})",
            f"- Thread: {thread or 'no thread in progress'}",
-           f"- Waiting on you ({len(waiting)}): {short(waiting[0]['text']) if waiting else 'none'}", "- Due dates:"]
+           f"- Waiting on you ({len(waiting)}):{'' if waiting else ' none'}"]
+    out += [f"  - {short(it['text'])}" for it in waiting] + ["- Due dates:"]
     out += [f"  - {'~' if a else ''}{d} · {short(it['text'])}" for d, a, _, it in due_items(root, [area.name])] or ["  - none"]
     out += ["", "## Board", re.sub(r"^(#+) ", r"#\1 ", without_log(board).strip(), flags=re.M), ""]
     recs = area.records
