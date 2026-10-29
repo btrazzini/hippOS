@@ -67,7 +67,7 @@ Run `/configure` again and choose to add an area. By hand: `python3 tools/memory
 
 ## Versions
 
-`system/VERSION`. If you change the protocol or a skill, `tools/version.sh <new>` bumps the version everywhere (`VERSION`, the protocol header, the skill titles and `memory.py`); with no argument, it only checks. Then reinstall in Claude (`tools/package.sh`). A change in the first two numbers calls for a `/sleep` (with no area, it goes through all of them) to convert the memory to the new format.
+`system/VERSION`. If you change the protocol or a skill, `tools/version.sh <new>` bumps the version everywhere (`VERSION`, the protocol header, the skill titles and `memory.py`); with no argument, it only checks. Then reinstall in Claude (`tools/package.sh`). Each version is tagged `vX.Y.Z`, with notes under Releases. A change in the first two numbers calls for a `/sleep` (with no area, it goes through all of them) to convert the memory to the new format.
 
 ## Known limits
 

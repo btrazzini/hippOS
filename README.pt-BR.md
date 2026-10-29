@@ -67,7 +67,7 @@ Rode o `/configure` de novo e escolha adicionar uma área. À mão: `python3 too
 
 ## Versões
 
-`system/VERSION`. Se você mudar o protocolo ou uma skill, `tools/version.sh <nova>` sobe a versão em todos os lugares (`VERSION`, cabeçalho do protocolo, título das skills e `memory.py`); sem argumento, só confere. Depois, reinstale no Claude (`tools/package.sh`). Mudança nos dois primeiros números pede um `/sleep` (sem área, ele passa por todas) para converter a memória ao formato novo.
+`system/VERSION`. Se você mudar o protocolo ou uma skill, `tools/version.sh <nova>` sobe a versão em todos os lugares (`VERSION`, cabeçalho do protocolo, título das skills e `memory.py`); sem argumento, só confere. Depois, reinstale no Claude (`tools/package.sh`). Cada versão ganha a tag `vX.Y.Z`, com notas em Releases. Mudança nos dois primeiros números pede um `/sleep` (sem área, ele passa por todas) para converter a memória ao formato novo.
 
 ## Limites conhecidos
 

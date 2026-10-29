@@ -18,4 +18,5 @@ This repository is the hippOS **system** (protocol, skills, validator, templates
 - Rule change: protocol, skills and validator in the same change; `python3 -m py_compile tools/memory.py tools/lookup.py`; bump the version with `tools/version.sh <new>` (protocol, skill titles, `VERSION` in `memory.py`).
 - Budget: the protocol and skills, which the assistant and sleep read every session, have a word ceiling (`tools/version.sh` checks it and refuses to bump the version above it). A new rule only comes in with the case that failed, and for one to come in, another leaves or merges. Test for each line: would removing it make the assistant err? What is mechanical goes into code, not text.
 - Outside inspirations: `system/inspirations.md`. A curious look; nothing comes in without passing the question "does this help an executive?".
+- Each version: one commit titled `X.Y.Z: <what>`, a tag `vX.Y.Z` on it and a GitHub release with short notes. The second number changes when the memory format changes (sleep converts it); the third, for everything else.
 - Commit messages in English; push only on request.
