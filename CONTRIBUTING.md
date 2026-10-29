@@ -14,7 +14,7 @@ Thanks for your interest. hippOS is open source (MIT): anyone can fork it, chang
 ## Checks
 
 ```
-python3 -m py_compile tools/memory.py tools/lookup.py
+python3 -m py_compile tools/memory.py tools/lookup.py tools/guard.py
 tools/version.sh
 ```
 

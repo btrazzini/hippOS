@@ -17,7 +17,7 @@ if [ $# -eq 1 ]; then
   [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid version: $new"; exit 2; }
   echo "$new" > system/VERSION
   perl -pi -e "s/^version: .*/version: $new/" system/protocol.md
-  perl -pi -e "s/\(v[0-9]+\.[0-9]+\.[0-9]+\)/(v$new)/" skills/assistant/SKILL.md skills/sleep/SKILL.md skills/configure/SKILL.md
+  perl -pi -e "s/\(v[0-9]+\.[0-9]+\.[0-9]+\)/(v$new)/" skills/assistant/SKILL.md skills/sleep/SKILL.md skills/configure/SKILL.md skills/protect/SKILL.md
   perl -pi -e "s/^VERSION = \".*\"/VERSION = \"$new\"/" tools/memory.py
 fi
 v="$(cat system/VERSION)"
@@ -27,6 +27,7 @@ check system/protocol.md "^version: $v$"
 check skills/assistant/SKILL.md "(v$v)"
 check skills/sleep/SKILL.md "(v$v)"
 check skills/configure/SKILL.md "(v$v)"
+check skills/protect/SKILL.md "(v$v)"
 check tools/memory.py "^VERSION = \"$v\"$"
 [ $err -eq 0 ] && echo "version $v everywhere; rules at $words of $WORD_LIMIT words"
 exit $err

@@ -4,7 +4,7 @@
 
 ## Checklist
 
-- [ ] `python3 -m py_compile tools/memory.py tools/lookup.py`
+- [ ] `python3 -m py_compile tools/memory.py tools/lookup.py tools/guard.py`
 - [ ] `tools/version.sh` passes (word budget), and the version was bumped if a rule changed
 - [ ] Protocol, skills and validator changed together, if a rule changed
 - [ ] Tested on a throwaway memory built from `templates/`

@@ -2,7 +2,7 @@
 name: assistant
 description: Acts as a personal assistant for one area of life (work, hobby, personal...) with the hippOS memory in Google Drive. Use with /assistant followed by the area (or $assistant in Codex), or "I want the work assistant".
 ---
-# hippOS area assistant (v0.1.1)
+# hippOS area assistant (v0.1.2)
 
 Memory rules: `protocol.md` in this folder. Read it in full before step 2.
 

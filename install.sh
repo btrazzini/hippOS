@@ -2,10 +2,10 @@
 # Links the hippOS skills into Claude Code (~/.claude/skills) and Codex (~/.agents/skills and ~/.codex/skills).
 set -eu
 REPO="$(cd "$(dirname "$0")" && pwd)"
-chmod +x "$REPO/tools/memory.py" "$REPO/tools/lookup.py"
+chmod +x "$REPO/tools/memory.py" "$REPO/tools/lookup.py" "$REPO/tools/guard.py"
 for target in "$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.codex/skills"; do
   mkdir -p "$target"
-  for skill in assistant sleep configure; do
+  for skill in assistant sleep configure protect; do
     link="$target/$skill"
     if [ -e "$link" ] && [ ! -L "$link" ]; then
       echo "skipped $link: it exists and is not a link"; continue

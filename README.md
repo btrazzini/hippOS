@@ -57,7 +57,8 @@ Tested on a Mac; not yet on Windows (see "Known limits").
    `install.sh` links the skills into Claude Code and Codex (`~/.claude/skills`, `~/.agents/skills` and `~/.codex/skills`).
 2. **`/configure`**, in Claude Code opened in that folder. It asks one question at a time and sets everything up: the `hippOS/` folder directly in "My Drive" (the name is fixed: it is how the assistant finds it), your profile (name, language, timezone), your first areas, and the `STATE.md` and `MAP.md` files.
 3. **Your private copy.** `/configure` also offers to create it: Claude Code in the cloud only opens repositories in your account, and a fork of a public repository can't be private. Your copy can have any name; hippOS stays as `upstream`, so you update with `git pull upstream main` and `git push`. Your own tweaks (hooks in `.claude/settings.json`, your own skills) stay only in your copy, in files hippOS doesn't have, so they never conflict.
-4. **Cloud and chat:** turn on the Google Drive connector in your Claude account, with the Google account that holds `hippOS/`. In the cloud, sessions open your private copy; in chat, a project that syncs your copy, or the `assistant` skill installed in your account with the zip from `tools/package.sh` (reinstall it with every version). Codex in the cloud isn't supported: its environment has no Google Drive tools.
+4. **Protections** (optional): `/protect` asks what each area's assistant must never do (deploy, write to a database, take down a shared environment, edit a code folder) and writes it to the area's `AREA.md`. On your computer it also turns on the guard, a hook in `tools/guard.py` that blocks those commands, addresses and edits in sessions opened in this folder. Elsewhere they are rules the assistant follows.
+5. **Cloud and chat:** turn on the Google Drive connector in your Claude account, with the Google account that holds `hippOS/`. In the cloud, sessions open your private copy; in chat, a project that syncs your copy, or the `assistant` skill installed in your account with the zip from `tools/package.sh` (reinstall it with every version). Codex in the cloud isn't supported: its environment has no Google Drive tools.
 
 No computer? Import hippOS as a private repository in your GitHub account, open a session at claude.ai/code on it and run `/configure`: it builds the memory through the Drive connector.
 
@@ -73,6 +74,7 @@ Run `/configure` again and choose to add an area. By hand: `python3 tools/memory
 
 - **Windows is untested.** The skills rely on git symlinks (turn on Developer Mode or `git config core.symlinks true` before cloning), `install.sh` needs bash (Git Bash or WSL), the rules call `python3`, and correct timezones need the `tzdata` package (`pip install tzdata`).
 - **Folder ids outside a Mac.** Only Google Drive for desktop on a Mac exposes folder ids, so a local `/sleep` on Windows or Linux leaves them out of `MAP.md`; the assistant in chat and in the cloud relies on them. A `/sleep` run in the cloud (claude.ai/code) fills them in.
+- **Protections are enforced only on the computer.** The guard blocks what the lists name in sessions opened in the repository's folder; in chat, in the cloud and in other folders they are rules. Patterns are plain text, so a determined rewrite of a command can slip past; keep anything critical behind real permissions too.
 - **Sleep is manual.** You run `/sleep` yourself (see below).
 
 ## Possible, not yet set up

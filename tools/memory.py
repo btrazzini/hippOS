@@ -29,7 +29,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 DAYS_STALE = 14
@@ -85,6 +85,8 @@ LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z]{2,4})?")
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 ROOT_NAME = "hippOS"  # the memory folder, directly in My Drive
+LIMIT_LISTS = {"Never run": "run", "Never open": "open", "Read only": "read_only"}  # AREA.md `## Limits`, read by guard.py
+BACKTICKED = re.compile(r"`([^`]+)`")
 DRIVES = ("My Drive", "Meu Drive", "Mi unidad", "Mon Drive", "Meine Ablage", "Il mio Drive")
 
 
@@ -309,6 +311,19 @@ def area_from_argument(root, name):
     return found
 
 
+def limits(root):
+    """The protections of every area, {"run"|"open"|"read_only": [(area, item)]}: the items in backticks of the
+    `- Never run:`, `- Never open:` and `- Read only:` lines of each AREA.md's `## Limits`."""
+    found = {kind: [] for kind in LIMIT_LISTS.values()}
+    for a in areas(root):
+        f = root / "areas" / a / "AREA.md"
+        for line in section(read(f)[1], "Limits", prefix=True) if f.exists() else []:
+            label, _, rest = line[2:].partition(":")
+            if label.strip() in LIMIT_LISTS:
+                found[LIMIT_LISTS[label.strip()]] += [(a, i.strip()) for i in BACKTICKED.findall(rest) if i.strip()]
+    return found
+
+
 def exists(root, area, ref):
     """A link target: a record of the area, of another one (`area:slug`) or of core (`core:slug`), or a draft."""
     if ":" in ref:
@@ -350,6 +365,11 @@ def validate(root, area):
                 if fold(a) == fold(other) or fold(a) in theirs:
                     errors.append(f"AREA.md: alias '{a}' conflicts with area {other}")
 
+    if area.name != "core" and (area.folder / "AREA.md").exists():
+        for line in section(read(area.folder / "AREA.md")[1], "Limits", prefix=True):
+            label, _, rest = line[2:].partition(":")
+            if label.strip() in LIMIT_LISTS and rest.strip() not in ("", "...", "none") and not BACKTICKED.search(rest):
+                warnings.append(f"AREA.md: '{label.strip()}' without items in backticks; the guard reads only `item`, `item`")
     for slug, (f, meta, body) in area.records.items():
         kind, status = meta.get("type", ""), meta.get("status", "")
         folder = f.parent.name
@@ -673,10 +693,14 @@ def opening(root, area, extra=()):
         blocks.append(f"**From other areas:** {'; '.join(summary)}")
     reasons = sleep_reasons(root, area, inbox_min=INBOX_MAX + 1)
     notes = []
-    repo = Path(__file__).resolve().parent.parent  # hooks only in the copy of whoever set them; no repository in chat
+    repo = Path(__file__).resolve().parent.parent  # hooks only where someone set them; no repository in chat
     cwd = Path.cwd().resolve()
-    if (repo / ".claude" / "settings.json").exists() and repo not in (cwd, *cwd.parents):
+    local = repo / ".claude" / "settings.local.json"
+    guarded = local.exists() and "guard.py" in text_of(local)
+    if ((repo / ".claude" / "settings.json").exists() or guarded) and repo not in (cwd, *cwd.parents):
         notes.append(f"protection hooks off (session outside {str(repo).replace(str(Path.home()), '~')})")
+    elif (repo / "tools").is_dir() and not guarded and any(limits(root).values()):
+        notes.append("protections are only rules here: the guard is off (/protect turns it on)")
     if reasons:
         notes.append(f"worth running /sleep ({'; '.join(reasons)})")
     st = area.file("STATE.md")
