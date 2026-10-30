@@ -4,7 +4,7 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.2.0)
+# hippOS sleep (v0.2.1)
 
 Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder.
 Argument: none, the normal case (sleep finds on its own what to process, step 0), or an area or `core`, to limit itself to it.
@@ -20,9 +20,9 @@ Sleep is the only one that writes to the curated memory. It works in two phases 
 - In the commands below, `<root>` is the local path or `<work>/hippOS`. `<work>` is `~/.cache/hippos-sleep/`, outside the repository and the skill (memory never stays in them); empty it at the start of each sleep. In both modes, before changing anything, copy to `<work>/before/` the files the run will touch (diff base and for undoing).
 - No argument: `python3 memory.py pending <root>` says which areas to process and why. Process one at a time, core last; nothing pending: delete the lock, tell <name> and stop.
 - `python3 memory.py validate <root> <area>`: note the errors that already existed before changing anything.
-- Fix now the list of captures for this pass (the area's, or those in `inbox/core/` in the core pass). A capture arriving during sleep waits for the next one; only those on the list go to the trash at the end.
+- Fix now the list of captures for this pass (the area's, or those in `inbox/core/` in the core pass, plus each file the validator says is outside the schema). A capture arriving during sleep waits for the next one; only those on the list go to the trash at the end.
 - Size of the run, decided by the list:
-  - **Light:** up to 3 captures, no decision, no `mode: forget`, no change of initiative state (e.g., only preferences or simple facts), no format error to fix (step 2.1) and no topic over the limit to split. Skips the independent reviewer (step 2.4) and regenerates only the `STATE.md` of the touched areas and `core/STATE.md`. Say in the reply that it was a light run.
+  - **Light:** up to 3 captures, no decision, no `mode: forget`, no change of initiative state (e.g., only preferences or simple facts), no format error to fix (step 2.1), no file outside the schema, no full pass and no topic over the limit to split. Skips the independent reviewer (step 2.4) and regenerates only the `STATE.md` of the touched areas and `core/STATE.md`. Say in the reply that it was a light run.
   - **Full:** everything else. Follows every step.
 
 ## 1. Consolidate (autonomous phase)
@@ -51,9 +51,15 @@ For each capture on the list, in date order:
 6. Threads: each topic's newest replaces its older one; up to 3, newest first; a finished topic leaves.
 Extra consolidation: `LOG.md` pruned beyond 30 days (keeping last contacts, per the protocol); duplicates merged; finished initiatives closed; aged item (validator warning) moved to its record per the protocol's "Lifecycle"; topic over the limit (validator warning) split: the original keeps the essentials and `links` to the new ones, without losing a line; an item whose text says who <name> owes gets `| for <who>`. An overdue to-do is not touched without a capture: the opening asks <name>.
 
+Old notes, in any run:
+- `.md` outside the schema (validator warning): a capture without a template; if nothing fits, `topics/`. Trashed with the others, named in the CHANGELOG. Not memory: moves to `drafts/`. In doubt: a question citing the file, which leaves the list and stays.
+- `since` (item or `## Open` line) or `verified` missing: the line's marker date, else the record's `updated` or `verified`, else the file's date with `[inherited <today>: date estimated]`. Never today's as if it were new.
+
+Full pass (`pending` says "memory at version ...", or <name> asks): also read every record and the board, touched or not, and bring them to the current format. No marker: `[inherited <today>: earlier version]`, never `[<name> ...]`. A deadline in words: `| due ~<date>`, counted from `since`; unsettled, a question. Nothing dropped, nothing invented.
+
 ## 2. Audit (checking phase)
 1. `python3 memory.py validate <root> <area>`: zero new errors. Fix and repeat. A pre-existing error is also fixed in this run, without asking <name>, without losing an item or changing the meaning of any.
-2. Content check, capture by capture. First `python3 memory.py fidelity <root> <area> <captures on the list> <copy in before/ of each split topic>`: each literal or line it flags (date, amount, PR, issue, code, link) is a loss to fix, unless it left on purpose (`mode: forget`, resolved item). Then: is everything the capture said in the curated memory, in the right place, with the right marker? Did no `[hypothesis]` become `[fact]`? Was no approved decision rewritten? Was nothing invented beyond what the captures said?
+2. Content check, capture by capture. First `python3 memory.py fidelity <root> <area> <captures on the list> <copy in before/ of each split topic>`: each literal or line it flags (date, amount, PR, issue, code, link, to-do) is a loss to fix, unless it left on purpose (`mode: forget`, resolved item). Then: is everything the capture said in the curated memory, in the right place, with the right marker? Did no `[hypothesis]` become `[fact]`? Was no approved decision rewritten? Was nothing invented beyond what the captures said?
 3. Coherence, which the validator can't see, in the records this run touched: frontmatter against body and board (e.g., an initiative's `owner` against a "Waiting on <name>" item asking who the owner will be); a decision whose body says it supersedes or amends another without the `supersedes`/`amends` field; a `next` that already happened according to another capture. Incoherence: fix it if the captures settle it; otherwise, a question for <name> on the board.
 4. Independent reviewer (full run only): if another agent is available (Codex when sleep runs in Claude, Claude when it runs in Codex), hand it the captures and the diff (before and after) with the request "point out only divergences between captures and curated memory, with file and line". No other agent: a subagent with `model: sonnet` (mechanical comparison; faster and cheaper) and without this session's context. Confirmed divergence: fix it.
 

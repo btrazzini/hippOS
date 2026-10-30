@@ -23,7 +23,7 @@ GitHub (sua cópia do hippOS)      Google Drive: hippOS/
 A configuração é guiada: o **`/configure`** faz uma pergunta por vez e monta a memória (veja "Começar").
 
 1. **`/assistant <area>`** abre uma conversa como o assistente daquela área. Ele lê o núcleo (`core/`), as regras da área e o `STATE.md`, levanta sozinho nas fontes da área o que espera por você (GitHub, pelo `tools/lookup.py`), responde "o que eu devo?" e, durante a conversa, grava no `inbox/` um arquivo pequeno por captura (decisão, mudança de estado, pendência, preferência). Nunca altera a memória curada.
-   - **A abertura** conta o que outras sessões acabaram de anotar (já é memória, mesmo antes do sono) e numera cada item, para você responder "1 feito, 3 na sexta". Mostra o que está atrasado, os próximos prazos, o que **cobrar** (o que você espera dos outros, atrasado ou parado há uma semana), o que espera por você e uma linha **Também** com o que espera sem data (perguntas, itens estacionados, decisões a revisar, iniciativas sem conferência). Com o conector de calendário, as reuniões do dia vêm com o que cada lado deve.
+   - **A abertura** conta o que outras sessões acabaram de anotar (já é memória, mesmo antes do sono) e numera cada item, para você responder "1 feito, 3 na sexta". Mostra o que está atrasado, os próximos prazos, o que **cobrar** (o que você espera dos outros, atrasado ou parado há uma semana), o que espera por você, três itens **sem data** (a cada dia outros, para nada depender de você lembrar de perguntar) e uma linha **Também** com a contagem do resto que espera (perguntas, itens estacionados, decisões a revisar, iniciativas sem conferência). Com o conector de calendário, as reuniões do dia vêm com o que cada lado deve.
    - **`/assistant`** sem área dá o resumo de todas as áreas de uma vez; às segundas, a abertura oferece a **revisão semanal** (`memory.py review`). Antes de você falar com alguém, o `memory.py person` traz tudo o que está aberto com a pessoa.
 2. **`/sleep`**, sem área, acha sozinho o que precisa de sono (`memory.py pending`: capturas no inbox, estado velho ou de versão anterior, erro ou arrumação apontada pelo validador) e processa área por área, núcleo por último. Com uma área (`/sleep <area>`), fica só nela. Em cada área: consolida na memória curada (fase 1), fiscaliza com o validador, a conferência de fidelidade e um revisor independente (fase 2), gera os `STATE.md` e o `MAP.md`, registra o que mudou no `CHANGELOG.md` e esvazia o inbox.
 
@@ -70,7 +70,9 @@ Rode o `/configure` de novo e escolha adicionar uma área. À mão: `python3 too
 
 ## Versões
 
-`system/VERSION`. Se você mudar o protocolo ou uma skill, `tools/version.sh <nova>` sobe a versão em todos os lugares (`VERSION`, cabeçalho do protocolo, título das skills e `memory.py`); sem argumento, só confere. Depois, reinstale no Claude (`tools/package.sh`). Cada versão ganha a tag `vX.Y.Z`, com notas em Releases. Mudança nos dois primeiros números pede um `/sleep` (sem área, ele passa por todas) para converter a memória ao formato novo.
+`system/VERSION`. Se você mudar o protocolo ou uma skill, `tools/version.sh <nova>` sobe a versão em todos os lugares (`VERSION`, cabeçalho do protocolo, título das skills e `memory.py`); sem argumento, só confere. Depois, reinstale no Claude (`tools/package.sh`). Cada versão ganha a tag `vX.Y.Z`, com notas em Releases. Mudança nos dois primeiros números pede um `/sleep` (sem área, ele passa por todas) para converter a memória ao formato novo: nessa passada ele lê todos os registros, não só os que as capturas tocaram.
+
+Notas antigas não precisam de ferramenta à parte: o que o validador aponta, o próximo `/sleep` corrige, mesmo sem versão nova. Um `.md` solto numa área ou fora das pastas do protocolo é tratado como captura: o conteúdo vai para o lugar certo e o arquivo, para a lixeira do Drive. Para guardar um texto que não é memória, deixe-o em `areas/<area>/drafts/`.
 
 ## Limites conhecidos
 

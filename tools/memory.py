@@ -8,7 +8,7 @@ of core/PROFILE.md (`name`, `timezone`).
   root                                   the root in Google Drive for desktop (Mac or Windows); HIPPOS_ROOT sets another
   new      <root> <name> <timezone> <language>   creates a memory from templates/ (never over an existing one)
   area     <root> <area> [alias ...]     adds an area from templates/ (never over an existing one)
-  validate <root> [area|core|all]        schema, links, captures, board, overdue
+  validate <root> [area|core|all]        schema, links, captures, board, overdue, files outside the schema
   pending  <root>                        what sleep with no argument processes, and why
   state    <root> <area> [--write]       generates areas/<area>/STATE.md
   core     <root> [--write] [--ids f]    generates core/STATE.md and MAP.md
@@ -19,7 +19,7 @@ of core/PROFILE.md (`name`, `timezone`).
   person   <root> <name>                 everything open with someone, in every area
   index    <root> <area>                 every record by type and status
   context  <root> <area> <slug>          the record and its neighbors
-  fidelity <root> <area> [capture ...]   capture literals missing from the memory
+  fidelity <root> <area> [capture ...]   capture literals and to-dos missing from the memory
 """
 import datetime as dt
 import difflib
@@ -32,7 +32,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -59,6 +59,7 @@ EMPTY = {"none", "nothing"}
 TEXT_MAX = 100
 TAG_MAX = 30  # an item named in the "and N more" line
 BLOCK_ITEMS = 5
+UNDATED_ITEMS = 3  # open items without a due date shown per day, in rotation
 AGENT_SEPARATOR = "----- agent only, do not show -----"
 CALENDAR = ("Calendar: if this environment has a calendar connector (load its tools if deferred), read today's remaining "
             "events before replying; with any, add a 🗓️ block right after the first line, `HH:MM · title`, and for "
@@ -71,6 +72,10 @@ LITERAL = re.compile(r"(?:R\$|US\$|\$|€|£)\s?\d[\d.,]*|`[^`\n]{2,80}`|https?:
                      r"|\b\d{4}-\d{2}-\d{2}\b|\b\d{2}/\d{2}(?:/\d{2,4})?\b|\b\d{3,}\b")
 LEFT_ON_PURPOSE = re.compile(r"^- (done|resolved|dropped|cancel|discard)", re.I)
 FOLDERS = ("initiatives", "decisions", "topics")
+AREA_FILES = ("AREA.md", "BOARD.md", "LOG.md", "STATE.md", "CHANGELOG.md")
+CORE_FILES = ("PROFILE.md", "PREFERENCES.md", "PRINCIPLES.md", "STATE.md", "CHANGELOG.md")
+ROOT_FILES = ("MAP.md", "SLEEP-IN-PROGRESS.md")
+CONFLICT_COPY = re.compile(r" \(\d+\)$")  # how Google Drive names a conflict copy
 LISTS = ("depends_on", "unblocks", "decisions", "affects", "amends", "links")
 SIMPLE_REFS = ("supersedes", "superseded_by")
 ORIGINS = {"claude-chat", "claude-code", "codex", "other"}
@@ -86,10 +91,15 @@ SECRETS = re.compile(
     re.IGNORECASE,
 )
 LINK = re.compile(r"\[\[([^\]]+)\]\]")
-DATE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
-# Words right before a date that make it look like a due date (content is in the owner's language)
+# A date in free text: ISO, dd/mm or mm/dd, or a day named in words (content is in the owner's language).
+# Not "today": "até hoje" means "so far". Not "até segunda ordem": "until further notice".
+TEXT_DATE = re.compile(r"\b(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}(?:/\d{2,4})?|tomorrow|amanh[ãa]"
+                       r"|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
+                       r"|segunda(?!\s+ordem)|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)\b", re.I)
+# Words right before a date that make it look like a due date
 DUE_WORDS = re.compile(r"\b(?:by|due(?: on| by)?|deadline:?|until|before|around|renews?(?: on)?"
                        r"|até|vence(?: em)?|prazo:?|por volta de|renova(?: em)?)\s*$")
+ABBREVIATION = re.compile(r"\b[A-Z][a-z]{1,3}$")  # "Dr", "Sra", "Prof" right before a period
 CAPTURE_NAME = re.compile(r"^\d{8}-\d{4}-[a-z-]+-[a-z0-9-]+\.md$")
 FIELD = re.compile(r"^(since|due):?\s+(~?)(\S+)$")
 FIELD_FOR = re.compile(r"^for:?\s+(.+)$")
@@ -384,10 +394,69 @@ def dates_in_text(text):
     """Dates that look like due dates in free text, outside markers and links (the format asks for '| due')."""
     bare = NOTATION.sub("", text)
     found = []
-    for m in DATE.finditer(bare):
+    for m in TEXT_DATE.finditer(bare):
         before = bare[max(0, m.start() - 30):m.start()].lower()
         if DUE_WORDS.search(before):
             found.append(m.group(1))
+    return found
+
+
+def same_day(found, due):
+    """A date found in an item's text is its due date: the same day, as dd/mm or mm/dd too. A day named in words
+    ("Friday") can't contradict the field."""
+    if "-" in found:
+        return found == due.isoformat()
+    if "/" in found:
+        a, b = (int(n) for n in found.split("/")[:2])
+        return (a, b) in ((due.day, due.month), (due.month, due.day))
+    return True
+
+
+def text_day(found, near):
+    """The day a date in a text stands for: ISO, or dd/mm (mm/dd in English) in the year that brings it closest to `near`."""
+    if "-" in found:
+        return iso_date(found)
+    parts = [int(n) for n in found.split("/")]
+    day, month = (parts[1], parts[0]) if SPEAKS.lower() in ("en", "en-us") else (parts[0], parts[1])
+    years = [parts[2] + (2000 if parts[2] < 100 else 0)] if len(parts) > 2 else [near.year - 1, near.year, near.year + 1]
+    days = []
+    for year in years:
+        try:
+            days.append(dt.date(year, month, day))
+        except ValueError:
+            pass
+    return min(days, key=lambda d: abs((d - near).days), default=None)
+
+
+def later_dates(text, since):
+    """Full dates in an item's text after the day it entered the board, whatever the word before them ("em 05/11",
+    "para 2026-12-01"): a deadline nothing reads. Earlier ones are history ("paid on 2026-10-28"); "3/4" is no date."""
+    near = since or local_today()
+    found = []
+    for m in TEXT_DATE.finditer(NOTATION.sub("", text)):
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}(?:/\d{2,4})?", m.group(1)):
+            day = text_day(m.group(1), near)
+            if day and day > near:
+                found.append(m.group(1))
+    return found
+
+
+def outside_schema(root, area):
+    """Markdown files nothing reads: loose in the area or in core, in a folder the protocol doesn't know, or a
+    conflict copy of a record. drafts/ is the place for what isn't memory."""
+    core = area.name == "core"
+    files, folders = (CORE_FILES, ("people",)) if core else (AREA_FILES, FOLDERS)
+    found = []
+    for f in sorted(area.folder.rglob("*.md")) if area.folder.is_dir() else []:
+        parts = f.relative_to(area.folder).parts
+        if parts[0] == "drafts" or any(p.startswith(".") for p in parts):
+            continue
+        loose = f.name not in files if len(parts) == 1 else parts[0] not in folders or len(parts) > 2
+        if loose or CONFLICT_COPY.search(f.stem):
+            found.append(f)
+    if core:
+        found += [f for f in sorted(root.glob("*.md")) if f.name not in ROOT_FILES]
+        found += sorted((root / "areas").glob("*.md"))
     return found
 
 
@@ -545,6 +614,9 @@ def validate(root, area):
             n = word_count(body)
             if kind == "topic" and n > TOPIC_MAX:
                 warnings.append(ForSleep("topic too large to split", f"{slug}: topic with {n} words (limit {TOPIC_MAX}); split into smaller topics joined by links"))
+        for line in section(body, "Open"):
+            if not PARKED.search(line) and clean(line[2:]).lower() not in EMPTY:
+                warnings.append(ForSleep("open line without since", f"{slug}: '## Open' line without '| since', so the weekly review misses it: '{clean(line[2:])[:50]}'"))
         for field in LISTS:
             for ref in as_list(meta.get(field)):
                 if not exists(root, area, ref):
@@ -599,6 +671,9 @@ def validate(root, area):
                 why = ("move there, as 'Who: what', the loose ends someone else owes" if title == OTHERS
                        else "headings stay in English, as in templates/")
                 errors.append(f"BOARD.md without '## {full}': {why}")
+        for title in re.findall(r"^## +(.+?)\s*$", body, re.M):
+            if title != "Log" and not any(title == k or title.startswith(f"{k} ") for k in ("Phase", "Priorities") + BOARD_SECTIONS):
+                errors.append(f"BOARD.md: section '## {title}' outside the template; nothing reads its items; move them to the right section")
         if len([l for l in section(body, "Thread") if clean(l[2:]).lower() not in EMPTY]) > THREADS:
             warnings.append(f"BOARD.md: more than {THREADS} threads; keep the newest, one per topic")
         overdue = 0
@@ -611,9 +686,11 @@ def validate(root, area):
                 errors.append(f"{label}: no '| since YYYY-MM-DD'")
             if it["section"] == OTHERS and not owner(it["text"]):
                 errors.append(f"{label}: no 'Who: what' (whom {NAME} is waiting on)")
-            loose = [d for d in dates_in_text(it["text"]) if not it["due"] or d != it["due"].isoformat()]
+            loose = [d for d in dates_in_text(it["text"]) if not it["due"] or not same_day(d, it["due"])]
+            if not it["due"]:
+                loose += [d for d in later_dates(it["text"], it["since"]) if d not in loose]
             if loose:
-                errors.append(f"{label}: due date in the text ({', '.join(loose)}); use '| due YYYY-MM-DD', one per item")
+                errors.append(f"{label}: due date in the text ({', '.join(loose)}); use '| due YYYY-MM-DD', one per item, or reword it if it is not one")
             if it["due"] and it["due"] < today and it["section"] != OTHERS:
                 overdue += 1
             if (it["section"] in AGING_SECTIONS and it["since"] and LINK.search(it["text"]) and not it["due"]
@@ -622,6 +699,12 @@ def validate(root, area):
         if overdue:
             warnings.append(f"BOARD.md: {overdue} item(s) overdue; the opening asks {NAME}")
 
+    outside = outside_schema(root, area)
+    nfc = lambda text: unicodedata.normalize("NFC", text)  # file names may come decomposed
+    asked = nfc("\n".join(text_of(b) for b in (root / "areas").glob("*/BOARD.md"))) if outside else ""
+    for f in outside:
+        text = f"{f.relative_to(root)}: outside the schema, nothing reads it; sleep consolidates it like a capture (what is not memory goes to drafts/)"
+        warnings.append(text if nfc(f.name) in asked else ForSleep("file outside the schema", text))  # already a question: only <name> can move it on
     inbox = root / "inbox" / area.name
     for f in sorted(inbox.iterdir()) if inbox.is_dir() else []:
         if f.is_file() and f.suffix != ".md" and not f.name.startswith("."):
@@ -706,13 +789,19 @@ def clean(text):
 
 
 def short(text, limit=TEXT_MAX):
-    """The gist of the item, before the first detail; a short label ("Goal: ...") stays."""
+    """The gist of the item, before the first detail; a short label ("Goal: ...") stays; a question goes up to its
+    question mark, so what is being asked stays; "Dr. Souza" is not the end of a sentence."""
     t = clean(text)
     label = re.match(r"^[^:]{1,25}: ", t)
     start = label.end() if label else 0
-    cut = next((m for m in re.finditer(r" \(|[.:;] ", t) if m.start() >= max(start, 15)), None)
-    if cut:
-        t = t[:cut.start()]
+    asks = re.search(r"\?(?=\s|$)", t)  # not the one in a link
+    if asks and asks.start() < limit:
+        t = t[:asks.start() + 1]
+    else:
+        cut = next((m for m in re.finditer(r" \(|[.:;] ", t) if m.start() >= max(start, 15)
+                    and not (m.group(0) == ". " and ABBREVIATION.search(t[:m.start()]))), None)
+        if cut:
+            t = t[:cut.start()]
     if len(t) > limit:
         t = t[:limit].rsplit(" ", 1)[0].rstrip(" .;,:(") + "..."
     return t[:1].upper() + t[1:]
@@ -824,6 +913,26 @@ def waited(it, today):
     """' · since <date>' when someone has waited on <name> for over DAYS_WAITING days."""
     old = it["since"] and (today - it["since"]).days > DAYS_WAITING
     return f" · since {short_date(it['since'], today)}" if old else ""
+
+
+def waits_on_owner(it):
+    """Someone waits on <name>: in "Waiting on", or anywhere of theirs with `for` (sleep may file it in "Loose ends")."""
+    return it["section"] == "Waiting on" or bool(it["for"] and it["section"] != OTHERS)
+
+
+def undated(items):
+    """<name>'s to-dos and questions with no due date and nobody waiting: nothing else brings them back. Oldest first."""
+    rows = [it for it in items if it["section"] in ("Loose ends", "Questions for") and not it["due"] and not it["for"]]
+    return sorted(rows, key=lambda it: it["since"] or dt.date.min)
+
+
+def in_turn(rows, today, limit=UNDATED_ITEMS):
+    """`limit` of the rows, a different few each day, in their order: every one comes back within days, without
+    state, and two openings on the same day show the same ones."""
+    if len(rows) <= limit:
+        return rows
+    start = today.toordinal() * limit % len(rows)
+    return [rows[i] for i in sorted((start + k) % len(rows) for k in range(limit))]
 
 
 # What waits without a date or went quiet: (key, icon, title, words in the opening's "Also" line or None)
@@ -940,7 +1049,9 @@ def opening(root, area, extra=(), describe=str):
     week = ([it for it in upcoming if (it["due"] - today).days < DAYS_NEXT]
             or [it for it in upcoming[:1] if (it["due"] - today).days <= DAYS_AHEAD])
     follow = follow_ups(items, today)
-    waiting = [it for it in items if it["section"] == "Waiting on"]
+    waiting = sorted((it for it in items if waits_on_owner(it)),  # first due, then who waits the longest
+                     key=lambda it: (it["due"] is None, it["due"] or it["since"] or dt.date.min))
+    loose = undated(items)
     running = threads(area)
     day = f"{WEEKDAYS[today.weekday()]}, {MONTHS[today.month - 1]} {today.day}"
     head = f"**{area_title(area.name)}** · {day} · 🧵 {short(running[0]) if running else 'no thread in progress'}"
@@ -958,12 +1069,16 @@ def opening(root, area, extra=(), describe=str):
     blocks += list(extra)
     waiting = [it for it in waiting if it not in overdue + week]  # already numbered above
     if waiting:
+        due = lambda it: f"{short_date(it['due'], today, it['approx'])} · " if it["due"] else ""
         blocks.append(n.block(f"⏳ **Waiting on you** ({len(waiting)})", [entry(
-            it, f"{describe(gist(it['text']))}{waited(it, today)}{noted(it, today)}") for it in waiting]))
+            it, f"{due(it)}{describe(gist(it['text']))}{waited(it, today)}{noted(it, today)}") for it in waiting]))
+    if loose:
+        blocks.append(n.block(f"🕸️ **Without a date** ({len(loose)}; do, date or drop?)",
+                              [entry(it, line(it)) for it in in_turn(loose, today)]))
     limit = today + dt.timedelta(days=DAYS_OTHER_AREAS)
     others = [p for p in due_items(root, [a for a in areas(root) if a != area.name]) if p[0] <= limit]
     summary = []
-    for a in sorted({p[2] for p in others}):
+    for a in [x for x in areas(root) if x != area.name]:
         late = [p for p in others if p[2] == a and p[0] < today and p[3]["section"] != OTHERS]
         nudge = [p for p in others if p[2] == a and p[0] < today and p[3]["section"] == OTHERS]
         soon = [p for p in others if p[2] == a and p[0] >= today]
@@ -971,7 +1086,12 @@ def opening(root, area, extra=(), describe=str):
         if soon:
             parts.append(f"1 due {short_date(soon[0][0], today, soon[0][1])}" if len(soon) == 1
                          else f"{len(soon)} due by {short_date(soon[-1][0], today, soon[-1][1])}")
-        summary.append(f"{area_title(a)}, {' and '.join(parts)}")
+        cold = undated(open_items(Area(root, a)))
+        oldest = next((it["since"] for it in cold if it["since"]), None)
+        if oldest and (today - oldest).days > DAYS_AGED:
+            parts.append(f"{len(cold)} without a date since {short_date(oldest, today)}")
+        if parts:
+            summary.append(f"{area_title(a)}, {' and '.join(parts)}")
     if summary:
         blocks.append(f"🗂️ **From other areas:** {'; '.join(summary)}")
     review = review_items(area, today)
@@ -999,7 +1119,10 @@ def opening(root, area, extra=(), describe=str):
     blocks.append(f"Weekly review: {total} item(s) waiting without a date. Go through them now, or which topic?"
                   if today.weekday() == REVIEW_DAY and total else "Which topic?")
     core = Area(root, "core").inbox
-    agent = [f"Inbox: {len(area.inbox)} capture(s) from the area and {len(core)} from core not yet consolidated "
+    agent = [f"Before replying, read in {root}: core/PROFILE.md and core/PREFERENCES.md (they override any default of "
+             f"yours), core/PRINCIPLES.md ({NAME}'s decision criteria: check them before recommending), "
+             f"areas/{area.name}/AREA.md (you become this assistant) and each inbox/core capture listed below.",
+             f"Inbox: {len(area.inbox)} capture(s) from the area and {len(core)} from core not yet consolidated "
              "(already counted above; \"noted\" = from a pending capture)."]
     agent += [f"- inbox/{f.parent.name}/{f.name}" for f in core + area.inbox] + n.agent()
     if total:
@@ -1037,8 +1160,9 @@ def area_state(root, area):
     _, board = area.file("BOARD.md") or ({}, "(no BOARD.md)\n")
     items = open_items(area)
     running = threads(area)
-    waiting = [it for it in items if it["section"] == "Waiting on"]
+    waiting = [it for it in items if waits_on_owner(it)]
     others = [it for it in items if it["section"] == OTHERS]
+    loose = undated(items)
     fields = lambda it: ((f" | since {it['since']}" if it["since"] else "")
                          + (f" | due {'~' if it['approx'] else ''}{it['due']}" if it["due"] else "")
                          + (" (from a pending capture)" if it.get("noted") else ""))
@@ -1051,7 +1175,10 @@ def area_state(root, area):
     out += [f"  - {short(it['text'])}{fields(it)}" for it in waiting]
     out += [f"- Waiting on others ({len(others)}; follow up when overdue or quiet for {DAYS_FOLLOW_UP} days):"
             + ("" if others else " none")]
-    out += [f"  - {short(it['text'])}{fields(it)}" for it in others] + ["- Due dates:"]
+    out += [f"  - {short(it['text'])}{fields(it)}" for it in others]
+    turn = in_turn(loose, today)
+    out += [f"- Without a date ({len(loose)}, oldest first; the opening shows this turn's):" + ("" if loose else " none")]
+    out += [f"  - {short(it['text'])}{fields(it)}{' (this turn)' if it in turn else ''}" for it in loose] + ["- Due dates:"]
     out += [f"  - {'~' if a else ''}{d} · {short(it['text'])}{THEIRS if it['section'] == OTHERS else ''}"
             for d, a, _, it in due_items(root, [area.name])] or ["  - none"]
     review = review_items(area, today)
@@ -1096,16 +1223,18 @@ def core_state(root, ids):
     today = local_today()
     out = ["---", "type: state", "area: core", f"generated: {now()}", f"system_version: {VERSION}", "---",
            "# View of all areas (generated by sleep; do not edit)", ""]
-    waiting, others, status = [], [], []
+    waiting, others, loose, status = [], [], [], []
     for name in areas(root):
         a = Area(root, name)
-        for it in open_items(a):
+        items = open_items(a)
+        for it in items:
             since = f" (since {it['since']})" if it["since"] else ""
             due = f" (due {it['due']})" if it["due"] else ""
-            if it["section"] == "Waiting on":
+            if waits_on_owner(it):
                 waiting.append(f"- [{name}] {it['text']}{since}")
             elif it["section"] == OTHERS:
                 others.append(f"- [{name}] {it['text']}{since}{due}")
+        loose += [f"- [{name}] {it['text']}" + (f" (since {it['since']})" if it["since"] else "") for it in undated(items)]
         st = a.file("STATE.md")
         generated = st[0].get("generated", "never") if st else "never"
         status.append(f"- {name}: state generated {generated}; inbox with {len(a.inbox)} capture(s)")
@@ -1117,6 +1246,7 @@ def core_state(root, ids):
     out += ["", f"## Waiting on {NAME}, all areas"] + (waiting or ["- none"])
     out += ["", f"## Waiting on others, all areas (follow up when overdue or quiet for {DAYS_FOLLOW_UP} days)"]
     out += others or ["- none"]
+    out += ["", "## Without a date, all areas"] + (loose or ["- none"])
     out += ["", "## Status"] + status
     state = "\n".join(out) + "\n"
 
@@ -1164,9 +1294,13 @@ def brief(root, until=None):
         blocks.append(f"📅 **Due dates, {title}:** none.")
     if follow:
         blocks.append(n.block(f"🔁 **Follow up** ({len(follow)}; nudge?)", [entry(it, line(a, it), a) for a, it in follow]))
+    cold = sorted(((a, it) for a, it in rows if it in undated([it])), key=lambda x: x[1]["since"] or dt.date.min)
+    if cold:
+        blocks.append(n.block(f"🕸️ **Without a date** ({len(cold)}; do, date or drop?)",
+                              [entry(it, line(a, it), a) for a, it in in_turn(cold, today)]))
     waiting = []
     for a in names:
-        mine = [it for x, it in rows if x == a and it["section"] == "Waiting on"]
+        mine = [it for x, it in rows if x == a and waits_on_owner(it)]
         oldest = min((it["since"] for it in mine if it["since"]), default=None)
         if mine:
             waiting.append(f"{area_title(a)} {len(mine)}" + (f" (oldest since {short_date(oldest, today)})"
@@ -1376,8 +1510,8 @@ def literals(text):
 def present(lit, corpus, compact):
     if lit.startswith("`"):
         return lit.strip("`") in corpus
-    if lit.startswith(CURRENCIES + ("http",)):
-        return re.sub(r"\s", "", lit).rstrip(".,;") in compact
+    if lit.startswith(CURRENCIES + ("http",)):  # R$ 34 is not found in R$ 340 or R$ 34,50
+        return re.search(re.escape(re.sub(r"\s", "", lit).rstrip(".,;")) + r"(?![\d.,]*\d)", compact) is not None
     if re.fullmatch(r"\d{2}/\d{2}(/\d{2,4})?", lit):
         a, b = lit.split("/")[:2]  # dd/mm or mm/dd
         return lit in corpus or re.search(rf"\d{{4}}-({b}-{a}|{a}-{b})\b", corpus) is not None
@@ -1387,15 +1521,35 @@ def present(lit, corpus, compact):
     return re.search(rf"\b{number}\b", corpus) is not None
 
 
+def lost_todos(area, captures):
+    """(capture, to-do) of each to-do of the area's captures that names no board item and no parked one, and no
+    capture closed. Read from BOARD.md itself: open_items would find each to-do in its own pending capture."""
+    if not (area.folder / "BOARD.md").exists():
+        return []
+    mine = [f for f in captures if f.parent.name == area.name and read(f)[0].get("mode") != "forget"]
+    closed = [d.group(1) for f in mine for l in section(read(f)[1], "To-dos") for d in [DONE.match(l)] if d]
+    kept = [it["text"] for it in board_items(area.file("BOARD.md")[1])]
+    kept += [l[2:] for _, _, body in area.records.values() for part in ("Open", "Addenda") for l in section(body, part)]
+    lost = []
+    for f in mine:
+        for l in section(read(f)[1], "To-dos"):
+            it = board_item("", l)
+            if DONE.match(l) or it["empty"] or not words(it["text"]):
+                continue
+            if not any(matches(k, it["text"]) for k in kept) and not any(matches(it["text"], c) for c in closed):
+                lost.append((f.name, clean(it["text"])))
+    return lost
+
+
 def fidelity(root, area, names):
-    """Literals of each capture missing from the curated memory of the area and of core.
+    """Literals and to-dos of each capture missing from the curated memory of the area and of core.
 
     An argument that is not an inbox capture is the before-copy of a split topic: each of its lines must be in the memory."""
     files = [f for f, _, _ in area.records.values()] + [f for f, _, _ in Area(root, "core").records.values()]
     files += [area.folder / n for n in ("BOARD.md", "LOG.md", "AREA.md")]
     files += [root / "core" / n for n in ("PREFERENCES.md", "PROFILE.md", "PRINCIPLES.md")]
     corpus = "\n".join(text_of(f) for f in files if f.exists())
-    compact = re.sub(r"\s", "", corpus)
+    compact = re.sub(r"[^\S\n]", "", corpus)  # lines stay apart: "R$ 34." is not "R$ 34.12" with the next line
     missing = 0
     in_inbox = {f.name for f in area.inbox + Area(root, "core").inbox}
     before = sorted(n for n in names if Path(n).name not in in_inbox)
@@ -1421,6 +1575,10 @@ def fidelity(root, area, names):
         missing += len(absent)
         if absent:
             print(f"{f.name}: {', '.join(absent)}")
+    todos = lost_todos(area, captures)
+    missing += len(todos)
+    for name, todo in todos:
+        print(f"{name}: to-do not on the board: {todo[:100]}")
     print(f"fidelity: {len(captures)} capture(s), {missing} literal(s) or line(s) to check")
     return 1 if missing else 0
 
@@ -1442,7 +1600,7 @@ def main(argv):
     if len(argv) < 3:
         print(__doc__)
         return 2
-    cmd, root = argv[1], Path(argv[2]).expanduser()
+    cmd, root = argv[1], Path(argv[2]).expanduser().resolve()  # "." has no name, and MAP.md is titled with it
     if cmd == "new":
         if len(argv) != 6:
             print(__doc__)

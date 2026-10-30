@@ -1,6 +1,6 @@
 ---
 type: protocol
-version: 0.2.0
+version: 0.2.1
 ---
 # hippOS memory protocol
 
@@ -87,7 +87,7 @@ What to capture: decision and rationale, change of state, priority, to-do with o
 
 When: right after the fact, without waiting for the end; context may run out. Group in one capture what came up in the same stretch of conversation. Every capture ends with `## Thread`, the topic in progress (format in "Board items"): a session may end without warning.
 
-Where: `inbox/<area>/`; a preference or fact about <name> that applies to every area goes to `inbox/core/`, with `area: core`.
+Where: `inbox/<area>/` of the area it belongs to, whichever session it came up in; a preference or fact about <name> that applies to every area goes to `inbox/core/`, with `area: core`.
 
 File name: `YYYYMMDD-HHMM-<origin>-<short-topic>.md` (taken: add `-2`). Content:
 ```
@@ -128,7 +128,7 @@ Check at the source: only when the environment reaches the source (git, gh, Sent
 - Validity: an active initiative with `verified` over 14 days old is rechecked at the source before stating its state, or declared "not rechecked since <date>".
 - A resolved to-do leaves the BOARD; a relevant outcome goes to the topic's file.
 - An overdue to-do stays on the BOARD; the opening asks "done, postpone or drop?" and <name>'s answer becomes a capture.
-- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due` or `for` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the opening counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays.
+- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due` or `for` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the opening counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays. Every `## Open` line carries `| since`, or the review misses it.
 - A dated event (delivery, release, conversation) goes to `LOG.md`, newest on top; entries over 30 days old are pruned, the latest with a person kept as `- Last contact: <date>, <what>` in their record or the topic's.
 
 ## Common limits (each AREA.md adds its own)

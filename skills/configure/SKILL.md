@@ -2,7 +2,7 @@
 name: configure
 description: Sets up hippOS step by step, asking one question at a time - the hippOS folder in Google Drive, the person's profile, the first areas and, on a computer, the skills and the private copy of the repository. Use with /configure (or $configure in Codex), on first use, to add an area or to check the setup.
 ---
-# hippOS configure (v0.2.0)
+# hippOS configure (v0.2.1)
 
 Memory rules: `protocol.md` in this folder (read "Layers", "Root in Drive" and "Drive access"). Tools: `memory.py` in this folder (`new` and `area` build from the repository's `templates/`).
 

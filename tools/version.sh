@@ -1,7 +1,8 @@
 #!/bin/bash
 # Bumps the hippOS version everywhere (tools/version.sh 0.2.1); with no argument, only checks.
 # Also checks the rules budget: what the assistant and sleep read every session has a ceiling, and
-# for a rule to come in another one leaves or merges (AGENTS.md, "Budget").
+# for a rule to come in another one leaves or merges (AGENTS.md, "Budget"). skills/assistant/opening.md stays
+# out: only connector mode reads it, and local mode gets the opening from code.
 set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"

@@ -211,7 +211,7 @@ def main(argv):
     if len(argv) < 4 or argv[1] not in ("opening", "owe"):
         print(__doc__)
         return 2
-    root = Path(argv[2]).expanduser()
+    root = Path(argv[2]).expanduser().resolve()
     if not root.exists():
         print(f"root does not exist: {root}")
         return 2

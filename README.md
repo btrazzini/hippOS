@@ -21,7 +21,7 @@ GitHub (your copy of hippOS)      Google Drive: hippOS/
 Setup is guided: **`/configure`** asks one question at a time and builds the memory (see "Getting started").
 
 1. **`/assistant <area>`** opens a conversation as that area's assistant. It reads the core, the area's rules and its `STATE.md`, looks up on its own what is waiting on you in the area's sources (GitHub, through `tools/lookup.py`), answers "what do I owe?", and during the conversation writes a small file to the `inbox/` per capture (decision, change of state, to-do, preference). It never changes the curated memory.
-   - **The opening** counts what other sessions have just captured (it is memory already, even before sleep) and numbers each item, so you answer "1 done, 3 on Friday". It shows what is overdue, the next due dates, what to **follow up** (what you wait on from others, overdue or quiet for a week), what waits on you, and one **Also** line for what waits without a date (questions, parked items, decisions to review, initiatives not checked). With a calendar connector, today's meetings come with what each side owes.
+   - **The opening** counts what other sessions have just captured (it is memory already, even before sleep) and numbers each item, so you answer "1 done, 3 on Friday". It shows what is overdue, the next due dates, what to **follow up** (what you wait on from others, overdue or quiet for a week), what waits on you, three items **without a date** (a different few each day, so nothing depends on you remembering to ask) and one **Also** line counting the rest that waits (questions, parked items, decisions to review, initiatives not checked). With a calendar connector, today's meetings come with what each side owes.
    - **`/assistant`** with no area gives the brief of every area at once; on Mondays the opening offers the **weekly review** (`memory.py review`). Before you talk to someone, `memory.py person` brings everything open with them.
 2. **`/sleep`**, with no area, finds on its own what needs sleep (`memory.py pending`: captures in the inbox, old state or state from an earlier version, errors or cleanup flagged by the validator) and processes area by area, core last. With an area (`/sleep <area>`), it stays there. In each area it consolidates into the curated memory (phase 1), audits with the validator, the fidelity check and an independent reviewer (phase 2), generates the `STATE.md` files and `MAP.md`, records what changed in `CHANGELOG.md` and empties the inbox.
 
@@ -70,7 +70,9 @@ Run `/configure` again and choose to add an area. By hand: `python3 tools/memory
 
 ## Versions
 
-`system/VERSION`. If you change the protocol or a skill, `tools/version.sh <new>` bumps the version everywhere (`VERSION`, the protocol header, the skill titles and `memory.py`); with no argument, it only checks. Then reinstall in Claude (`tools/package.sh`). Each version is tagged `vX.Y.Z`, with notes under Releases. A change in the first two numbers calls for a `/sleep` (with no area, it goes through all of them) to convert the memory to the new format.
+`system/VERSION`. If you change the protocol or a skill, `tools/version.sh <new>` bumps the version everywhere (`VERSION`, the protocol header, the skill titles and `memory.py`); with no argument, it only checks. Then reinstall in Claude (`tools/package.sh`). Each version is tagged `vX.Y.Z`, with notes under Releases. A change in the first two numbers calls for a `/sleep` (with no area, it goes through all of them) to convert the memory to the new format: in that pass it reads every record, not only those the captures touched.
+
+Old notes need no separate tool: what the validator flags, the next `/sleep` fixes, even without a new version. A `.md` loose in an area or outside the protocol's folders is treated as a capture: its content goes where it belongs and the file to the Drive trash. To keep a text that isn't memory, leave it in `areas/<area>/drafts/`.
 
 ## Known limits
 

@@ -1,6 +1,6 @@
 # hippOS for outside agents (e.g., OpenAI's Dot)
 
-Paste it into the outside agent's instructions together with `system/protocol.md` and `skills/assistant/SKILL.md` (or their links, if the agent can browse: https://github.com/btrazzini/hippOS/blob/main/system/protocol.md and https://github.com/btrazzini/hippOS/blob/main/skills/assistant/SKILL.md). Those rules apply in full; this text only reinforces what an outside agent gets wrong most.
+Paste it into the outside agent's instructions together with `system/protocol.md`, `skills/assistant/SKILL.md` and `skills/assistant/opening.md` (or their links, if the agent can browse: https://github.com/btrazzini/hippOS/blob/main/system/protocol.md, https://github.com/btrazzini/hippOS/blob/main/skills/assistant/SKILL.md and https://github.com/btrazzini/hippOS/blob/main/skills/assistant/opening.md). Those rules apply in full; this text only reinforces what an outside agent gets wrong most.
 
 You help <name> (the `name` in `core/PROFILE.md`; replace it when pasting) with the hippOS memory in Google Drive. You run outside the computer, so you always use the protocol's connector mode.
 
