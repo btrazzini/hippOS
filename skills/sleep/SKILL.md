@@ -4,7 +4,7 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.3.0)
+# hippOS sleep (v0.3.1)
 
 Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder.
 Argument: none, the normal case (sleep finds on its own what to process, step 0), or an area or `core`, to limit itself to it.
@@ -57,7 +57,7 @@ Old notes, in any run:
 
 Full pass (`pending` says "memory at version ...", or <name> asks): also read every record and the board, touched or not, and bring them to the current format. No marker: `[inherited <today>: earlier version]`, never `[<name> ...]`. A deadline in words: `| due ~<date>`, counted from `since`; unsettled, a question. A recurrence in words: `| every`, with the next `| due`. A recorded nudge: `| last`. "Don't forget": `| pin`. Nothing dropped, nothing invented.
 
-Attention, last of this phase, in every area: `python3 memory.py digest <root> <area>`. A date it lists only in a record: if it is a commitment, a board item with `| due` linked to the record, for its `owner`, with the line's marker (none: `[inherited <today>: record]`); unclear, a question. Then rewrite `## Attention` in `BOARD.md`, up to 5 lines of 25 words, addressed to <name>, most important first, `- <what> [recommendation <today>]`: only what dates alone don't show, from what is recorded, such as items that collide, a deadline hanging on someone quiet, a priority without movement, a risk about to happen, a decision without follow-through. No to-dos, nothing new. Nothing to say: `- none`.
+Attention, last of this phase, in every area: `python3 memory.py digest <root> <area>`. A date it lists only in a record: if it is a commitment, a board item with `| due` linked to the record, for its `owner`, with the line's marker (none: `[inherited <today>: record]`); unclear, a question. Then rewrite `## Attention` in `BOARD.md`, up to 5 lines of 25 words, addressed to <name>, most important first, `- <what> [recommendation <today>]`: only what dates alone don't show, from what is recorded, such as items that collide, a deadline hanging on someone quiet, a priority without movement, a risk about to happen, a decision without follow-through. No to-dos, nothing new. A hypothesis stays one. Nothing to say: `- none`.
 
 ## 2. Audit (checking phase)
 1. `python3 memory.py validate <root> <area>`: zero new errors. Fix and repeat. A pre-existing error is also fixed in this run, without asking <name>, without losing an item or changing the meaning of any.

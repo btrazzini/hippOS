@@ -36,7 +36,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -1089,8 +1089,10 @@ THEIRS = " (waiting on others: follow up, not the owner's)"
 
 def review_items(area, today):
     """{key of REVIEW: [entry]}: the board's questions, quiet follow-ups and undated to-dos; the items parked in
-    the records; decisions to review or confirm; active initiatives not checked in DAYS_STALE days."""
+    the records, oldest first, since the review lists only some; decisions to review or confirm; active initiatives
+    not checked in DAYS_STALE days."""
     out = {key: [] for key, *_ in REVIEW}
+    parked = []
     for it in open_items(area):
         if it["section"] == "Questions for":
             out["questions"].append(entry(it, f"{gist(it['text'])}{waited(it, today)}{noted(it, today)}"))
@@ -1106,8 +1108,8 @@ def review_items(area, today):
                 if since:  # an impossible date ("since 2026-02-30") still shows the item, without it
                     day = iso_date(since.group(1) or since.group(2))
                     when_ = f" · since {short_date(day, today)}" if day else ""
-                    out["parked"].append((f"{short(l[2:].split(' | ')[0])} · {title}{when_}",
-                                          f"(parked in the ## {part} of {slug}) {l[2:]}", tag(l[2:])))
+                    parked.append((day or dt.date.min, (f"{short(l[2:].split(' | ')[0])} · {title}{when_}",
+                                                        f"(parked in the ## {part} of {slug}) {l[2:]}", tag(l[2:]))))
         if kind == "decision":
             review, made = iso_date(meta.get("review_on")), iso_date(meta.get("date"))
             decided = f" · decided {short_date(made, today)}" if made else ""
@@ -1121,6 +1123,7 @@ def review_items(area, today):
         if kind == "initiative" and status == "active" and verified and (today - verified).days > DAYS_STALE:
             out["unchecked"].append((f"{title} · checked {short_date(verified, today)} · next: {short(meta.get('next', ''))}",
                                      f"(initiative {slug}) verified {verified}; recheck at the source", tag(title)))
+    out["parked"] = [e for _, e in sorted(parked, key=lambda p: p[0])]
     return out
 
 
