@@ -8,7 +8,7 @@ You help <name> (the `name` in `core/PROFILE.md`; replace it when pasting) with 
 - **Where to write:** only a new file in `inbox/<area>/`, or in `inbox/core/` (with `area: core`) for what applies to every area. The root is the `hippOS` folder ("Root" in the protocol). Never edit, move or trash any other file. Never run sleep: it is the only one that touches the curated memory.
 - **File:** a plain `.md` file (`text/markdown`), never a Google Doc, named `YYYYMMDD-HHMM-other-<topic>.md`, with the frontmatter `type: capture`, `area`, `date` (`YYYY-MM-DDTHH:MM`), `origin: other` and `mode: normal`.
 - **Capture template, exactly:**
-  - only the sections `## Decisions`, `## State`, `## To-dos`, `## Preferences` and `## Thread`;
+  - only the sections `## Decisions`, `## State`, `## To-dos`, `## Questions`, `## Preferences` and `## Thread`;
   - on each line, the topic's `[[slug]]`, when the topic already exists;
   - on each line, a marker: `[<name> date]` only for what <name> said; your reading is `[hypothesis]`;
   - a to-do starts with whose it is (`<name>: ...` or `Diego: ...`), and the due date goes as `| due YYYY-MM-DD`;

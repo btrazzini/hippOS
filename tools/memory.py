@@ -19,7 +19,9 @@ of core/PROFILE.md (`name`, `timezone`).
   person   <root> <name>                 everything open with someone, in every area
   index    <root> <area>                 every record by type and status
   context  <root> <area> <slug>          the record and its neighbors
-  fidelity <root> <area> [capture ...]   capture literals and to-dos missing from the memory
+  fidelity <root> <area> [capture ...]   capture literals, to-dos and questions missing from the memory
+  digest   <root> <area>                 the area on one screen, for sleep to write ## Attention
+  archive  <root> <area>                 moves LOG.md entries over 30 days old to log/<YYYY-MM>.md
 """
 import datetime as dt
 import difflib
@@ -32,7 +34,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -44,6 +46,8 @@ DAYS_NEXT = 7  # due dates in the opening
 DAYS_AHEAD = 14  # with none in DAYS_NEXT, the first one up to here; further out only weighs on the screen
 DAYS_FOLLOW_UP = 7  # waiting on others with no due date and no news for longer: time to nudge
 DAYS_WAITING = 7  # "Waiting on you" says since when, past this
+DAYS_LOG = 30  # LOG.md keeps this many days; older entries go to log/<YYYY-MM>.md
+ATTENTION_MAX = 5  # lines sleep writes for the top of the opening
 BOARD_MAX_LINES = 80
 BOARD_MAX_BYTES = 9000
 INBOX_MAX = 15
@@ -54,7 +58,7 @@ ITEM_SECTIONS = ("Waiting on", OTHERS, "Loose ends", "Questions for")  # "Waitin
 BOARD_SECTIONS = ITEM_SECTIONS + ("Thread",)
 AGING_SECTIONS = ("Waiting on", "Questions for")
 DONE = re.compile(r"^- (?:done|dropped|resolved)\b:?\s*(.+)", re.I)
-CAPTURE_SECTIONS = ("Decisions", "State", "To-dos", "Preferences", "Thread")
+CAPTURE_SECTIONS = ("Decisions", "State", "To-dos", "Questions", "Preferences", "Thread")
 EMPTY = {"none", "nothing"}
 TEXT_MAX = 100
 TAG_MAX = 30  # an item named in the "and N more" line
@@ -72,6 +76,10 @@ LITERAL = re.compile(r"(?:R\$|US\$|\$|€|£)\s?\d[\d.,]*|`[^`\n]{2,80}`|https?:
                      r"|\b\d{4}-\d{2}-\d{2}\b|\b\d{2}/\d{2}(?:/\d{2,4})?\b|\b\d{3,}\b")
 LEFT_ON_PURPOSE = re.compile(r"^- (done|resolved|dropped|cancel|discard)", re.I)
 FOLDERS = ("initiatives", "decisions", "topics")
+BOARD_OPTIONAL = ("Phase", "Priorities", "Attention")  # the board's sections beyond the required ones
+RECORD_DATED = ("Risks", "Consequences", "Open")  # where a record may hide a commitment, besides `next`
+ATTENTION_MARKER = re.compile(r"\[recommendation (\d{4}-\d{2}-\d{2})\b")
+FULL_DATE = re.compile(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}(?:/\d{2,4})?")
 AREA_FILES = ("AREA.md", "BOARD.md", "LOG.md", "STATE.md", "CHANGELOG.md")
 CORE_FILES = ("PROFILE.md", "PREFERENCES.md", "PRINCIPLES.md", "STATE.md", "CHANGELOG.md")
 ROOT_FILES = ("MAP.md", "SLEEP-IN-PROGRESS.md")
@@ -104,7 +112,7 @@ CAPTURE_NAME = re.compile(r"^\d{8}-\d{4}-[a-z-]+-[a-z0-9-]+\.md$")
 FIELD = re.compile(r"^(since|due):?\s+(~?)(\S+)$")
 FIELD_FOR = re.compile(r"^for:?\s+(.+)$")
 MARKERS = r"fact|{name}|inherited|hypothesis|recommendation"
-WITH_AREA = ("validate", "state", "opening", "review", "index", "context", "fidelity")
+WITH_AREA = ("validate", "state", "opening", "review", "index", "context", "fidelity", "digest", "archive")
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z]{2,4})?")
@@ -349,6 +357,11 @@ def unfiled(area):
                 if not it["empty"] and words(it["text"]):
                     it.update(section=capture_section(it), since=it["since"] or day, noted=day)
                     events.append(("todo", it))
+            for l in section(body, "Questions"):
+                it = board_item("", l)
+                if not it["empty"] and words(it["text"]):
+                    it.update(section="Questions for", since=it["since"] or day, noted=day)
+                    events.append(("todo", it))
             threads = [l[2:] for l in section(body, "Thread")] + threads
         area._unfiled = events, threads
     return area._unfiled
@@ -434,7 +447,7 @@ def later_dates(text, since):
     near = since or local_today()
     found = []
     for m in TEXT_DATE.finditer(NOTATION.sub("", text)):
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}|\d{2}/\d{2}(?:/\d{2,4})?", m.group(1)):
+        if FULL_DATE.fullmatch(m.group(1)):
             day = text_day(m.group(1), near)
             if day and day > near:
                 found.append(m.group(1))
@@ -445,7 +458,7 @@ def outside_schema(root, area):
     """Markdown files nothing reads: loose in the area or in core, in a folder the protocol doesn't know, or a
     conflict copy of a record. drafts/ is the place for what isn't memory."""
     core = area.name == "core"
-    files, folders = (CORE_FILES, ("people",)) if core else (AREA_FILES, FOLDERS)
+    files, folders = (CORE_FILES, ("people",)) if core else (AREA_FILES, FOLDERS + ("log",))
     found = []
     for f in sorted(area.folder.rglob("*.md")) if area.folder.is_dir() else []:
         parts = f.relative_to(area.folder).parts
@@ -672,8 +685,14 @@ def validate(root, area):
                        else "headings stay in English, as in templates/")
                 errors.append(f"BOARD.md without '## {full}': {why}")
         for title in re.findall(r"^## +(.+?)\s*$", body, re.M):
-            if title != "Log" and not any(title == k or title.startswith(f"{k} ") for k in ("Phase", "Priorities") + BOARD_SECTIONS):
+            if title != "Log" and not any(title == k or title.startswith(f"{k} ") for k in BOARD_OPTIONAL + BOARD_SECTIONS):
                 errors.append(f"BOARD.md: section '## {title}' outside the template; nothing reads its items; move them to the right section")
+        notes = [l for l in section(body, "Attention") if clean(l[2:]).lower().rstrip(".") not in EMPTY]
+        if len(notes) > ATTENTION_MAX:
+            warnings.append(f"BOARD.md: more than {ATTENTION_MAX} lines in ## Attention; keep the most important")
+        for l in notes:
+            if not ATTENTION_MARKER.search(l):
+                errors.append(f"BOARD.md (Attention) '{clean(l[2:])[:50]}': no '[recommendation YYYY-MM-DD]'; it is a reading, never a fact")
         if len([l for l in section(body, "Thread") if clean(l[2:]).lower() not in EMPTY]) > THREADS:
             warnings.append(f"BOARD.md: more than {THREADS} threads; keep the newest, one per topic")
         overdue = 0
@@ -795,8 +814,9 @@ def short(text, limit=TEXT_MAX):
     label = re.match(r"^[^:]{1,25}: ", t)
     start = label.end() if label else 0
     asks = re.search(r"\?(?=\s|$)", t)  # not the one in a link
-    if asks and asks.start() < limit:
-        t = t[:asks.start() + 1]
+    room = 2 * limit if limit >= TEXT_MAX else limit  # what is asked often comes last, so a question may run longer
+    if asks and asks.start() < room:
+        t, limit = t[:asks.start() + 1], room
     else:
         cut = next((m for m in re.finditer(r" \(|[.:;] ", t) if m.start() >= max(start, 15)
                     and not (m.group(0) == ". " and ABBREVIATION.search(t[:m.start()]))), None)
@@ -913,6 +933,46 @@ def waited(it, today):
     """' · since <date>' when someone has waited on <name> for over DAYS_WAITING days."""
     old = it["since"] and (today - it["since"]).days > DAYS_WAITING
     return f" · since {short_date(it['since'], today)}" if old else ""
+
+
+def attention(area, today=None):
+    """What sleep wrote for the top of the opening, without notation, and the day it wrote it. With `today`, its dates
+    as on the rest of the screen; without it, as written, for files read on other days ("tomorrow" wouldn't last)."""
+    _, board = area.file("BOARD.md") or ({}, "")
+    lines = [l for l in section(board, "Attention") if clean(l[2:]).lower().rstrip(".") not in EMPTY]
+    days = [iso_date(m.group(1)) for m in map(ATTENTION_MARKER.search, lines) if m]
+    readable = lambda m: short_date(iso_date(m.group(0)), today) if today and iso_date(m.group(0)) else m.group(0)
+    return ([re.sub(r"\b\d{4}-\d{2}-\d{2}\b", readable, clean(l[2:])) for l in lines],
+            max((d for d in days if d), default=None))
+
+
+def log_bodies(area):
+    """The text of LOG.md and of the months archived in log/."""
+    log = area.file("LOG.md")
+    return ([log[1]] if log else []) + [read(f)[1] for f in sorted((area.folder / "log").glob("*.md"))]
+
+
+def hidden(area, today):
+    """(day, slug, where, text) of the commitments dated only in a record (`next`, ## Risks, ## Consequences, ## Open):
+    a date ahead, or a gone one with a due word before it (the rest is history), that no open item carries. An item
+    carries it with the same due date and the record linked or two words in common: a date alone is a coincidence."""
+    items = open_items(area)
+    found = []
+    for slug, (_, meta, body) in sorted(area.records.items()):
+        if meta.get("status") in ("done", "cancelled", "superseded", "discarded"):
+            continue
+        lines = ([("next", meta["next"])] if meta.get("next") else []) + [(s, l[2:]) for s in RECORD_DATED for l in section(body, s)]
+        for where, text in lines:
+            bare = re.sub(r"\|\s*since\s+\S+", "", NOTATION.sub("", text))  # the line's own age is no commitment
+            for m in TEXT_DATE.finditer(bare):
+                day = text_day(m.group(1), today) if FULL_DATE.fullmatch(m.group(1)) else None
+                if not day or (day < today and not DUE_WORDS.search(bare[max(0, m.start() - 30):m.start()].lower())):
+                    continue
+                carried = any(it["due"] == day and (slug in LINK.findall(it["text"]) or len(words(it["text"]) & words(text)) >= 2)
+                              for it in items)
+                if not carried:
+                    found.append((day, slug, where, clean(text)))
+    return sorted(found)
 
 
 def waits_on_owner(it):
@@ -1058,6 +1118,9 @@ def opening(root, area, extra=(), describe=str):
     if len(running) > 1:
         head += f" · also in progress: {'; '.join(topic(t) for t in running[1:])}"
     blocks = [head]
+    notes, made = attention(area, today)
+    if notes:
+        blocks.append(block("🎯 **Attention**" + (f" (sleep of {short_date(made, today)})" if made else ""), notes, limit=ATTENTION_MAX))
     line = lambda it: f"{when(it, today)} · {describe(gist(it['text']))}{noted(it, today)}"
     if overdue:
         blocks.append(n.block("🔴 **Overdue** (done, postpone or drop?)", [entry(it, line(it)) for it in overdue]))
@@ -1223,6 +1286,8 @@ def core_state(root, ids):
     today = local_today()
     out = ["---", "type: state", "area: core", f"generated: {now()}", f"system_version: {VERSION}", "---",
            "# View of all areas (generated by sleep; do not edit)", ""]
+    notes = [f"- [{name}] {l}" for name in areas(root) for l in attention(Area(root, name))[0]]
+    out += ["## Attention, all areas"] + (notes or ["- none"]) + [""]
     waiting, others, loose, status = [], [], [], []
     for name in areas(root):
         a = Area(root, name)
@@ -1281,6 +1346,9 @@ def brief(root, until=None):
     follow.sort(key=lambda x: x[1]["due"] or x[1]["since"] or x[1].get("noted") or dt.date.min)
     day = f"{WEEKDAYS[today.weekday()]}, {MONTHS[today.month - 1]} {today.day}"
     blocks = [f"**All areas** · {day}"]
+    tops = [f"{area_title(a)} · {notes[0]}" for a in names for notes in [attention(Area(root, a), today)[0]] if notes]
+    if tops:
+        blocks.append(block("🎯 **Attention**", tops, limit=ATTENTION_MAX))
     if overdue:
         blocks.append(n.block("🔴 **Overdue** (done, postpone or drop?)", [entry(it, line(a, it), a) for a, it in overdue]))
     title = f"until {short_date(end, today)}" if until else f"next {DAYS_NEXT} days"
@@ -1362,10 +1430,10 @@ def person(root, name):
         running += [(a, t) for t in threads(area) if hit(t)]
         records += [(a, s, m_.get("title") or s) for s, (_, m_, b) in sorted(area.records.items())
                     if hit(m_.get("title")) or hit(clean(b))]
-        log = area.file("LOG.md")
-        for l in section(log[1], "Log", prefix=True) if log else []:
-            if iso_date(l[2:12]) and hit(clean(l)):
-                logs.append((iso_date(l[2:12]), a, l[2:].split(":", 1)[-1]))
+        for body in log_bodies(area):
+            for l in section(body, "Log", prefix=True):
+                if iso_date(l[2:12]) and hit(clean(l)):
+                    logs.append((iso_date(l[2:12]), a, l[2:].split(":", 1)[-1]))
     for a in areas(root) + ["core"]:
         for _, m_, b in Area(root, a).records.values():
             for l in section(b, "Facts"):
@@ -1394,6 +1462,72 @@ def person(root, name):
                       + (f"; and {len(records) - 5} more" if len(records) > 5 else ""))
     refs = f"Records: {', '.join(f'{a}:{s}' for a, s, _ in records)}" if records else ""
     return "\n\n".join(blocks) + "\n\n" + for_agent(*n.agent(), refs)
+
+
+def digest(root, area):
+    """The area on one screen, for sleep to write ## Attention: what is open, what is at stake and what the opening
+    doesn't show, such as risks, consequences and the dates that live only in a record."""
+    today = local_today()
+    _, board = area.file("BOARD.md") or ({}, "")
+    records = sorted(area.records.items())
+    out = [f"# Digest of {area.name}, {today}"]
+    for title in BOARD_OPTIONAL:
+        out += [f"## {title}"] + [f"- {clean(l[2:])}" for l in section(board, title)]
+    out += ["## Open items"] + [f"- {ref(it)}" for it in open_items(area)]
+    out += ["## Threads"] + [f"- {t}" for t in threads(area)]
+    out += ["## Active initiatives (slug | priority | owner | verified | next)"]
+    for slug, (_, meta, body) in records:
+        if meta.get("type") == "initiative" and meta.get("status") == "active":
+            out.append(initiative_line(slug, meta, today))
+            out += [f"  - risk: {clean(l[2:])}" for l in section(body, "Risks")]
+    out += [f"## Decisions of the last {DAYS_LOG} days, or waiting for their review"]
+    for slug, (_, meta, body) in records:
+        made, review = iso_date(meta.get("date")), iso_date(meta.get("review_on"))
+        recent = made and (today - made).days <= DAYS_LOG
+        pending_review = review and "## Outcome" not in body and (review - today).days <= DAYS_AHEAD
+        if meta.get("type") == "decision" and meta.get("status") in ("approved", "proposed") and (recent or pending_review):
+            out.append(f"- [[{slug}]] | {meta.get('status')} | {meta.get('date', '')} | {meta.get('title', '')}" + (f" | review_on {review}" if review else ""))
+            out += [f"  - consequence: {clean(l[2:])}" for l in section(body, "Consequences")]
+    out += ["## Dates only in a record, on no open item"]
+    out += [f"- {day} | [[{slug}]] | {where} | {text}" for day, slug, where, text in hidden(area, today)] or ["- none"]
+    out += [f"## Due in other areas, next {DAYS_AHEAD} days"]
+    limit = today + dt.timedelta(days=DAYS_AHEAD)
+    out += [f"- {d} [{a}] {clean(it['text'])}" for d, _, a, it in due_items(root, [x for x in areas(root) if x != area.name]) if d <= limit] or ["- none"]
+    log = area.file("LOG.md")
+    out += ["## Latest in LOG.md"] + (section(log[1], "Log", prefix=True)[:10] if log else [])
+    return "\n".join(out) + "\n"
+
+
+def archive_log(area, today):
+    """Moves LOG.md entries over DAYS_LOG days old, with their indented details, to the top of log/<YYYY-MM>.md, whose
+    content stays as it is: nothing dated is lost, and LOG.md, the one the agents read, stays short. Writes the archive
+    first, so an interrupted run only repeats; a file that isn't valid UTF-8 (the validator flags it) is left alone."""
+    f = area.folder / "LOG.md"
+    text = text_of(f) if f.exists() else ""
+    if "�" in text:
+        return 0
+    kept, moved, month = [], {}, None
+    for l in text.split("\n"):
+        if month and l[:1] in (" ", "\t"):
+            moved[month][-1] += f"\n{l}"
+            continue
+        day = iso_date(l[2:12]) if l.startswith("- ") else None
+        month = day.strftime("%Y-%m") if day and (today - day).days > DAYS_LOG else None
+        if month:
+            moved.setdefault(month, []).append(l)
+        else:
+            kept.append(l)
+    for month, entries in moved.items():
+        g = area.folder / "log" / f"{month}.md"
+        g.parent.mkdir(exist_ok=True)
+        lines = (text_of(g).rstrip("\n") if g.exists() else f"---\ntype: log\n---\n## Log ({month})").split("\n")
+        known = set(lines)
+        at = next((i + 1 for i, l in enumerate(lines) if l.startswith("## Log")), len(lines))
+        lines[at:at] = [e for e in sorted(entries, key=lambda e: e[2:12], reverse=True) if e.split("\n")[0] not in known]
+        g.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if moved:
+        f.write_text("\n".join(kept), encoding="utf-8")
+    return sum(len(v) for v in moved.values())
 
 
 # ---------- new memory and areas ----------
@@ -1521,32 +1655,39 @@ def present(lit, corpus, compact):
     return re.search(rf"\b{number}\b", corpus) is not None
 
 
-def lost_todos(area, captures):
-    """(capture, to-do) of each to-do of the area's captures that names no board item and no parked one, and no
-    capture closed. Read from BOARD.md itself: open_items would find each to-do in its own pending capture."""
+def lost_items(area, captures):
+    """(capture, what) of each to-do or question of the area's captures that names no board item, no parked one and
+    no closed one, and of each closed one with no line in LOG.md. Read from the files themselves: open_items would
+    find each one in its own pending capture."""
     if not (area.folder / "BOARD.md").exists():
         return []
     mine = [f for f in captures if f.parent.name == area.name and read(f)[0].get("mode") != "forget"]
-    closed = [d.group(1) for f in mine for l in section(read(f)[1], "To-dos") for d in [DONE.match(l)] if d]
+    closed = [(f.name, d.group(1)) for f in mine for l in section(read(f)[1], "To-dos") for d in [DONE.match(l)] if d]
     kept = [it["text"] for it in board_items(area.file("BOARD.md")[1])]
     kept += [l[2:] for _, _, body in area.records.values() for part in ("Open", "Addenda") for l in section(body, part)]
+    logged = []
+    for l in (l for body in log_bodies(area) for l in section(body, "Log", prefix=True)):
+        text = re.sub(r"^\d{4}-\d{2}-\d{2}:\s*", "", l[2:])
+        d = DONE.match(f"- {text}")
+        logged.append(d.group(1) if d else text)
     lost = []
     for f in mine:
-        for l in section(read(f)[1], "To-dos"):
+        for l in section(read(f)[1], "To-dos") + section(read(f)[1], "Questions"):
             it = board_item("", l)
             if DONE.match(l) or it["empty"] or not words(it["text"]):
                 continue
-            if not any(matches(k, it["text"]) for k in kept) and not any(matches(it["text"], c) for c in closed):
-                lost.append((f.name, clean(it["text"])))
+            if not any(matches(k, it["text"]) for k in kept) and not any(matches(it["text"], c) for _, c in closed):
+                lost.append((f.name, f"not on the board: {clean(it['text'])}"))
+    lost += [(name, f"closed, but not in LOG.md: {clean(c)}") for name, c in closed if not any(matches(x, c) for x in logged)]
     return lost
 
 
 def fidelity(root, area, names):
-    """Literals and to-dos of each capture missing from the curated memory of the area and of core.
+    """Literals, to-dos and questions of each capture missing from the curated memory of the area and of core.
 
     An argument that is not an inbox capture is the before-copy of a split topic: each of its lines must be in the memory."""
     files = [f for f, _, _ in area.records.values()] + [f for f, _, _ in Area(root, "core").records.values()]
-    files += [area.folder / n for n in ("BOARD.md", "LOG.md", "AREA.md")]
+    files += [area.folder / n for n in ("BOARD.md", "LOG.md", "AREA.md")] + sorted((area.folder / "log").glob("*.md"))
     files += [root / "core" / n for n in ("PREFERENCES.md", "PROFILE.md", "PRINCIPLES.md")]
     corpus = "\n".join(text_of(f) for f in files if f.exists())
     compact = re.sub(r"[^\S\n]", "", corpus)  # lines stay apart: "R$ 34." is not "R$ 34.12" with the next line
@@ -1575,10 +1716,10 @@ def fidelity(root, area, names):
         missing += len(absent)
         if absent:
             print(f"{f.name}: {', '.join(absent)}")
-    todos = lost_todos(area, captures)
-    missing += len(todos)
-    for name, todo in todos:
-        print(f"{name}: to-do not on the board: {todo[:100]}")
+    lost = lost_items(area, captures)
+    missing += len(lost)
+    for name, what in lost:
+        print(f"{name}: {what[:120]}")
     print(f"fidelity: {len(captures)} capture(s), {missing} literal(s) or line(s) to check")
     return 1 if missing else 0
 
@@ -1616,7 +1757,7 @@ def main(argv):
             print(__doc__)
             return 2
         return new_area(root, argv[3], argv[4:])
-    if cmd in ("state", "opening", "review", "index", "context", "fidelity", "person") and len(argv) < (5 if cmd == "context" else 4):
+    if cmd in ("state", "opening", "review", "index", "context", "fidelity", "person", "digest", "archive") and len(argv) < (5 if cmd == "context" else 4):
         print(__doc__)
         return 2
     if cmd in WITH_AREA and len(argv) > 3 and not argv[3].startswith("--") and not (cmd in ("validate", "review") and argv[3] == "all"):
@@ -1691,6 +1832,12 @@ def main(argv):
         return context(root, Area(root, argv[3]), argv[4])
     if cmd == "fidelity":
         return fidelity(root, Area(root, argv[3]), set(argv[4:]))
+    if cmd == "digest":
+        print(digest(root, Area(root, argv[3])))
+        return 0
+    if cmd == "archive":
+        print(f"{archive_log(Area(root, argv[3]), local_today())} LOG entries moved to log/")
+        return 0
     print(__doc__)
     return 2
 

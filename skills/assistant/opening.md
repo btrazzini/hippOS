@@ -7,6 +7,9 @@ Only where `lookup.py opening` can't run; it delivers this same opening ready. F
 🗓️ **Today**
 - <14:00> · <event> · you owe: <gist>; <person> owes: <gist>
 
+🎯 **Attention** (sleep of <date>)
+- <each line of the board's `## Attention`, as written>
+
 > ⚠️ **Check:** <an item the thread or a capture suggests already happened>
 
 🔴 **Overdue** (done, postpone or drop?)

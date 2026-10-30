@@ -4,7 +4,7 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.2.1)
+# hippOS sleep (v0.2.2)
 
 Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder.
 Argument: none, the normal case (sleep finds on its own what to process, step 0), or an area or `core`, to limit itself to it.
@@ -22,7 +22,7 @@ Sleep is the only one that writes to the curated memory. It works in two phases 
 - `python3 memory.py validate <root> <area>`: note the errors that already existed before changing anything.
 - Fix now the list of captures for this pass (the area's, or those in `inbox/core/` in the core pass, plus each file the validator says is outside the schema). A capture arriving during sleep waits for the next one; only those on the list go to the trash at the end.
 - Size of the run, decided by the list:
-  - **Light:** up to 3 captures, no decision, no `mode: forget`, no change of initiative state (e.g., only preferences or simple facts), no format error to fix (step 2.1), no file outside the schema, no full pass and no topic over the limit to split. Skips the independent reviewer (step 2.4) and regenerates only the `STATE.md` of the touched areas and `core/STATE.md`. Say in the reply that it was a light run.
+  - **Light:** up to 3 captures, no decision, no `mode: forget`, no change of initiative state, no format error to fix (step 2.1), no file outside the schema, no full pass and no topic over the limit to split. Skips the independent reviewer (step 2.4) and regenerates only the `STATE.md` of the touched areas and `core/STATE.md`.
   - **Full:** everything else. Follows every step.
 
 ## 1. Consolidate (autonomous phase)
@@ -48,8 +48,8 @@ For each capture on the list, in date order:
 3. `mode: forget`: remove from the curated memory what was asked and what depended only on it.
 4. Service preference or decision criterion: `core/PREFERENCES.md` or `core/PRINCIPLES.md`, with `[<name> date]`. What the protocol or the assistant skill already say is not repeated there; what contradicts them goes in anyway, being <name>'s latest word, and is reported in the reply as an adjustment to make in the system.
 5. A doubt only <name> can settle (where it fits, whether something was approved, captures that contradict each other; a later one that changes an earlier one is an update): don't decide; it becomes an item in the board's `## Questions for <name>`, citing the capture.
-6. Threads: each topic's newest replaces its older one; up to 3, newest first; a finished topic leaves.
-Extra consolidation: `LOG.md` pruned beyond 30 days (keeping last contacts, per the protocol); duplicates merged; finished initiatives closed; aged item (validator warning) moved to its record per the protocol's "Lifecycle"; topic over the limit (validator warning) split: the original keeps the essentials and `links` to the new ones, without losing a line; an item whose text says who <name> owes gets `| for <who>`. An overdue to-do is not touched without a capture: the opening asks <name>.
+6. Threads: each topic's newest replaces its older one; a finished topic leaves.
+Extra consolidation: `python3 memory.py archive <root> <area>`; duplicates merged; finished initiatives closed; aged item (validator warning) moved to its record per the protocol's "Lifecycle"; topic over the limit (validator warning) split: the original keeps the essentials and `links` to the new ones, without losing a line; an item whose text says who <name> owes gets `| for <who>`. An overdue to-do is not touched without a capture: the opening asks <name>.
 
 Old notes, in any run:
 - `.md` outside the schema (validator warning): a capture without a template; if nothing fits, `topics/`. Trashed with the others, named in the CHANGELOG. Not memory: moves to `drafts/`. In doubt: a question citing the file, which leaves the list and stays.
@@ -57,15 +57,17 @@ Old notes, in any run:
 
 Full pass (`pending` says "memory at version ...", or <name> asks): also read every record and the board, touched or not, and bring them to the current format. No marker: `[inherited <today>: earlier version]`, never `[<name> ...]`. A deadline in words: `| due ~<date>`, counted from `since`; unsettled, a question. Nothing dropped, nothing invented.
 
+Attention, last of this phase, in every area: `python3 memory.py digest <root> <area>`. A date it lists only in a record: if it is a commitment, a board item with `| due` linked to the record, for its `owner`, with the line's marker (none: `[inherited <today>: record]`); unclear, a question. Then rewrite `## Attention` in `BOARD.md`, up to 5 lines of 25 words, addressed to <name>, most important first, `- <what> [recommendation <today>]`: only what dates alone don't show, from what is recorded, such as items that collide, a deadline hanging on someone quiet, a priority without movement, a risk about to happen, a decision without follow-through. No to-dos, nothing new. Nothing to say: `- none`.
+
 ## 2. Audit (checking phase)
 1. `python3 memory.py validate <root> <area>`: zero new errors. Fix and repeat. A pre-existing error is also fixed in this run, without asking <name>, without losing an item or changing the meaning of any.
-2. Content check, capture by capture. First `python3 memory.py fidelity <root> <area> <captures on the list> <copy in before/ of each split topic>`: each literal or line it flags (date, amount, PR, issue, code, link, to-do) is a loss to fix, unless it left on purpose (`mode: forget`, resolved item). Then: is everything the capture said in the curated memory, in the right place, with the right marker? Did no `[hypothesis]` become `[fact]`? Was no approved decision rewritten? Was nothing invented beyond what the captures said?
+2. Content check, capture by capture. First `python3 memory.py fidelity <root> <area> <captures on the list> <copy in before/ of each split topic>`: each literal or line it flags (date, amount, PR, issue, code, link, to-do) is a loss to fix, unless it left on purpose (`mode: forget`, resolved item already in `LOG.md`). Then: is everything the capture said in the curated memory, in the right place, with the right marker? Did no `[hypothesis]` become `[fact]`? Was no approved decision rewritten? Was nothing invented beyond what the captures said?
 3. Coherence, which the validator can't see, in the records this run touched: frontmatter against body and board (e.g., an initiative's `owner` against a "Waiting on <name>" item asking who the owner will be); a decision whose body says it supersedes or amends another without the `supersedes`/`amends` field; a `next` that already happened according to another capture. Incoherence: fix it if the captures settle it; otherwise, a question for <name> on the board.
 4. Independent reviewer (full run only): if another agent is available (Codex when sleep runs in Claude, Claude when it runs in Codex), hand it the captures and the diff (before and after) with the request "point out only divergences between captures and curated memory, with file and line". No other agent: a subagent with `model: sonnet` (mechanical comparison; faster and cheaper) and without this session's context. Confirmed divergence: fix it.
 
 ## 3. Write
 1. The area's `CHANGELOG.md`, and `core/CHANGELOG.md` when the run touched core (create from the template if missing): dated entry on top with the processed captures and, per file, what changed in one line.
-2. Send to Drive only the changed files (local: already in place; connector mode: create the new one with the same title in the same folder and trash the old one only after the new one exists). Order, so that an interrupted sleep never loses data: curated first (with `BOARD.md` and `LOG.md`), then `CHANGELOG.md`.
+2. Send to Drive only the changed files (local: already in place; connector mode: create the new one with the same title in the same folder and trash the old one only after the new one exists; a new folder first, its id in `ids.json`). Order, so that an interrupted sleep never loses data: curated first (with `BOARD.md` and `LOG.md`), then `CHANGELOG.md`.
 3. Only after that: trash the captures on the list fixed in step 0 (connector mode: also from `<work>/hippOS/inbox/`, which `state` reads). A capture that produced a question for <name> also goes (the question is on the board).
 4. `python3 memory.py state <root> <area> --write` generates `areas/<area>/STATE.md`, and `python3 memory.py core <root> --write` generates `core/STATE.md` and `MAP.md` (in connector mode, with `--ids <work>/ids.json`; locally, the ids come from Drive itself). In connector mode, send them to Drive. Check at the end that no folder has two files with the same title.
 5. Last, delete `SLEEP-IN-PROGRESS.md` (connector mode: trash it). If sleep stops midway on an error, also delete the lock before replying.

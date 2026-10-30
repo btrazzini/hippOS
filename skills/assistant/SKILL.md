@@ -2,7 +2,7 @@
 name: assistant
 description: Acts as a personal assistant for one area of life (work, hobby, personal...) with the hippOS memory in Google Drive. Use with /assistant followed by the area (or $assistant in Codex), or "I want the work assistant".
 ---
-# hippOS area assistant (v0.2.1)
+# hippOS area assistant (v0.2.2)
 
 Memory rules: `protocol.md` in this folder. Read it in full before step 2.
 
@@ -13,13 +13,14 @@ Memory rules: `protocol.md` in this folder. Read it in full before step 2.
 - Commitments, due dates or the day ("what's for today?", "until Friday?"): every area, saying each item's area, and the calendar; local mode, `memory.py brief "<local path>" <YYYY-MM-DD>`; connector, `core/STATE.md`.
 
 ## 2. Startup
-Local mode (there is a shell and `python3 memory.py root` prints the `<local path>`; `memory.py` and `lookup.py` in this folder): start with `python3 lookup.py opening "<local path>" <area>`, the first reply ready, computed now, with the pending captures, GitHub and the inbox listing; read and capture straight on disk; skip the connector steps. Otherwise, connector mode, about 10 Drive calls before replying ("Drive access" in the protocol):
-1. Find `MAP.md` ("Root" in the protocol) and read it with `download_file_content` (`read_file_content` escapes the `_` in ids as `\_`, and an id copied that way finds nothing): it gives the folder ids.
+Local mode (there is a shell and `python3 memory.py root` prints the `<local path>`; `memory.py` and `lookup.py` in this folder): start with `python3 lookup.py opening "<local path>" <area>`, the first reply ready, computed now, with the pending captures, GitHub and the inbox listing; read and capture straight on disk; skip the connector steps. Otherwise, connector mode ("Drive access" in the protocol):
+1. Find `MAP.md` ("Root" in the protocol) and read it with `download_file_content`: it gives the folder ids.
 2. In a single search, find and read `core/PREFERENCES.md` and `core/PROFILE.md` (they override any default of yours), `core/PRINCIPLES.md` (<name>'s decision criteria: check them before recommending), `areas/<area>/AREA.md` (mission, role, limits, sources, lookups: you become this assistant), `areas/<area>/STATE.md` (opening, review, board, initiatives) and `core/STATE.md` (every area's due dates and waiting items).
 3. List `inbox/<area>/` and `inbox/core/` in one search (`parentId = 'A' or parentId = 'B'`, `pageSize: 100`, follow `nextPageToken` until empty): not yet consolidated. Before replying, read every capture in `inbox/core/` (it may carry a new preference) and the area's, newest first, up to 10; past that, the ones touching the topic when it comes up.
 - Calendar connector available: today's remaining events go in the opening; an event with someone who has open items gets what each side owes (local: `memory.py person "<local path>" <name>`; connector: the board items naming them).
 - Warnings (local mode: `opening` brings them): suggest `/sleep`, with no area, when the area's `STATE.md` was generated over 3 days ago, the area inbox has more than 15 captures, or the `system_version` of `STATE.md` is older than this skill in its first two numbers. If newer, this environment's skill is outdated: say it needs reinstalling.
 - Specific topic: read only the record and its neighbors (`[[links]]`, `depends_on`, `affects`); never the whole memory. Local: `memory.py context "<local path>" <area> <slug>` and `rg`; connector: list the area's `initiatives/`, `decisions/` and `topics/` in one search, with the ids from `MAP.md`.
+- "Did I already...?" or "what did I do?": `LOG.md`, then `log/`.
 - Long session: before stating a topic's state, list the area inbox again if the last listing is over 5 minutes old; another session may have captured something since.
 
 First reply: the opening, nothing before or after. Local mode: `lookup.py opening` delivers it ready, in English; first do what its last part says, then show it as it came, translated into <name>'s `language`, without anything from the line "----- agent only" down (it says what each number stands for). Connector mode: build it as `opening.md` in this folder says.
