@@ -22,7 +22,9 @@ of core/PROFILE.md (`name`, `timezone`).
   fidelity <root> <area> [capture ...]   capture literals, to-dos and questions missing from the memory
   digest   <root> <area>                 the area on one screen, for sleep to write ## Attention
   archive  <root> <area>                 moves LOG.md entries over 30 days old to log/<YYYY-MM>.md
+  capture  <root> <area> <origin> <topic> [--forget]   writes a capture from stdin; refuses malformed fields
 """
+import calendar
 import datetime as dt
 import difflib
 import json
@@ -34,7 +36,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -109,10 +111,16 @@ DUE_WORDS = re.compile(r"\b(?:by|due(?: on| by)?|deadline:?|until|before|around|
                        r"|até|vence(?: em)?|prazo:?|por volta de|renova(?: em)?)\s*$")
 ABBREVIATION = re.compile(r"\b[A-Z][a-z]{1,3}$")  # "Dr", "Sra", "Prof" right before a period
 CAPTURE_NAME = re.compile(r"^\d{8}-\d{4}-[a-z-]+-[a-z0-9-]+\.md$")
-FIELD = re.compile(r"^(since|due):?\s+(~?)(\S+)$")
+FIELD = re.compile(r"^(since|due|last):?\s+(~?)(\S+)$")
 FIELD_FOR = re.compile(r"^for:?\s+(.+)$")
+FIELD_PREP = re.compile(r"^prep:?\s+(\S+)$")
+FIELD_EVERY = re.compile(r"^every:?\s+(.+)$")
+PREP = re.compile(r"^[0-9]{1,4}$")
+EVERY = re.compile(r"^(?:([1-9][0-9]{0,2})\s+)?(day|week|month|year)s?$")  # n = 0 would never move on
+NOT_DONE = re.compile(r"^- (?:feito|feita|conclu[ií]d[oa]|pront[oa]|finished|completed)\s*:", re.I)  # the marker is "Done:"
+DROPPED = re.compile(r"^- dropped\b", re.I)
 MARKERS = r"fact|{name}|inherited|hypothesis|recommendation"
-WITH_AREA = ("validate", "state", "opening", "review", "index", "context", "fidelity", "digest", "archive")
+WITH_AREA = ("validate", "state", "opening", "review", "index", "context", "fidelity", "digest", "archive", "capture")
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z]{2,4})?")
@@ -254,18 +262,34 @@ def section(body, title, prefix=False):
 # ---------- board ----------
 
 def board_item(title, line):
-    """A board item: '- text | since YYYY-MM-DD | due [~]YYYY-MM-DD | for <who>'."""
+    """A board item: '- text | since YYYY-MM-DD | due [~]YYYY-MM-DD | for <who> | last YYYY-MM-DD | prep <days> |
+    every [n] day|week|month|year | pin'."""
     parts = line[2:].strip().split(" | ")
     fields, errors = {}, []
     while len(parts) > 1:
-        who = FIELD_FOR.match(parts[-1].strip())
+        tail = parts[-1].strip()
+        if tail == "pin":
+            parts.pop()
+            fields["pin"] = True
+            continue
+        prep, every = FIELD_PREP.match(tail), FIELD_EVERY.match(tail)
+        if prep or every:
+            parts.pop()
+            if prep and PREP.match(prep.group(1)):
+                fields["prep"] = int(prep.group(1))
+            elif every and EVERY.match(every.group(1).strip()):
+                fields["every"] = every.group(1).strip()
+            else:
+                errors.append(f"'{tail}': use 'prep <days>' or 'every [n] day|week|month|year'")
+            continue
+        who = FIELD_FOR.match(tail)
         if who:
             parts.pop()
             if "for" in fields:
                 errors.append("repeated for field")
             fields["for"] = who.group(1).strip()
             continue
-        m = FIELD.match(parts[-1].strip())
+        m = FIELD.match(tail)
         if not m:
             break
         key, approx, value = m.groups()
@@ -274,14 +298,38 @@ def board_item(title, line):
             errors.append(f"repeated {key} field")
         elif len(value) != 10 or not iso_date(value):
             errors.append(f"{key} with an invalid date ({value})")
-        elif approx and key == "since":
-            errors.append("since does not take ~")
+        elif approx and key != "due":
+            errors.append(f"{key} does not take ~")
         else:
             fields[key] = (iso_date(value), bool(approx))
     text = " | ".join(parts).strip()
     due, approx = fields.get("due", (None, False))
-    return {"section": title, "text": text, "since": fields.get("since", (None,))[0],
-            "due": due, "approx": approx, "for": fields.get("for"), "empty": text.lower().rstrip(".") in EMPTY, "errors": errors}
+    return {"section": title, "text": text, "since": fields.get("since", (None,))[0], "due": due, "approx": approx,
+            "for": fields.get("for"), "last": fields.get("last", (None,))[0], "prep": fields.get("prep"),
+            "every": fields.get("every"), "pin": fields.get("pin", False),
+            "empty": text.lower().rstrip(".") in EMPTY, "errors": errors}
+
+
+def next_due(due, every, after):
+    """The first occurrence of a recurring item after the day `after`, counted from `due`. A month too short for that
+    day takes its last one, and the item stays there from then on: earlier than the 31st, never later."""
+    m = EVERY.match(every)
+    n, unit = int(m.group(1) or 1), m.group(2)
+    try:
+        if unit in ("day", "week"):
+            span = n * (7 if unit == "week" else 1)
+            return due + dt.timedelta(days=span * max(1, (after - due).days // span + 1))
+        span = n * (12 if unit == "year" else 1)
+        step = max(1, ((after.year - due.year) * 12 + after.month - due.month) // span)
+        while True:
+            months = due.month - 1 + step * span
+            year, month = due.year + months // 12, months % 12 + 1
+            d = dt.date(year, month, min(due.day, calendar.monthrange(year, month)[1]))
+            if d > after:
+                return d
+            step += 1
+    except (ValueError, OverflowError):  # past the calendar's last year
+        return due
 
 
 def board_items(body):
@@ -351,7 +399,8 @@ def unfiled(area):
             for l in section(body, "To-dos"):
                 d = DONE.match(l)
                 if d:
-                    events.append(("done", d.group(1)))
+                    done = board_item("", f"- {d.group(1)}")  # a closing line may repeat the item's fields
+                    events.append(("done", (done["text"], day, None if DROPPED.match(l) else done["every"], bool(DROPPED.match(l)))))
                     continue
                 it = board_item("", l)
                 if not it["empty"] and words(it["text"]):
@@ -368,20 +417,32 @@ def unfiled(area):
 
 
 def open_items(area):
-    """The board's open items with the pending captures applied in date order: a to-do they close leaves; a to-do
-    naming a board item updates its due date and `for`; any other comes in, `noted`."""
+    """The board's open items with the pending captures applied in date order: a to-do they close leaves, or, when it
+    recurs and was done, not dropped, moves on to its next occurrence (unless sleep already moved it: `last` is that
+    day or later); a to-do naming a board item updates its fields; any other comes in, `noted`."""
     _, board = area.file("BOARD.md") or ({}, "")
     items = [it for it in board_items(board) if not it["empty"]]
     for kind, x in unfiled(area)[0]:
         if kind == "done":
-            items = [it for it in items if not matches(it["text"], x)]  # x: the text after "Done:"
+            text, day, every, dropped = x  # the text after "Done:", the capture's day, the recurrence it may state
+            kept = []
+            for it in items:
+                every_ = it["every"] or every
+                if not matches(it["text"], text):
+                    kept.append(it)
+                elif every_ and it["due"] and not dropped:
+                    if not (it["last"] and it["last"] >= day):
+                        it.update(due=next_due(it["due"], every_, day), every=every_, approx=False, last=day, noted=day)
+                    kept.append(it)
+            items = kept
             continue
         same = next((it for it in items if (it["section"] == OTHERS) == (x["section"] == OTHERS)
                      and matches(it["text"], x["text"])), None)
         if same:
             if x["due"]:
                 same.update(due=x["due"], approx=x["approx"])
-            same.update({"for": x["for"] or same["for"], "noted": x["noted"]})
+            same.update({"for": x["for"] or same["for"], "noted": x["noted"], "last": x["last"] or same["last"],
+                         "prep": x["prep"] or same["prep"], "every": x["every"] or same["every"], "pin": x["pin"] or same["pin"]})
         else:
             items.append(dict(x))
     return items
@@ -705,6 +766,8 @@ def validate(root, area):
                 errors.append(f"{label}: no '| since YYYY-MM-DD'")
             if it["section"] == OTHERS and not owner(it["text"]):
                 errors.append(f"{label}: no 'Who: what' (whom {NAME} is waiting on)")
+            if it["every"] and not it["due"]:
+                errors.append(f"{label}: 'every' without '| due': the next occurrence counts from it")
             loose = [d for d in dates_in_text(it["text"]) if not it["due"] or not same_day(d, it["due"])]
             if not it["due"]:
                 loose += [d for d in later_dates(it["text"], it["since"]) if d not in loose]
@@ -713,7 +776,7 @@ def validate(root, area):
             if it["due"] and it["due"] < today and it["section"] != OTHERS:
                 overdue += 1
             if (it["section"] in AGING_SECTIONS and it["since"] and LINK.search(it["text"]) and not it["due"]
-                    and not it["for"] and (today - it["since"]).days > DAYS_AGED):
+                    and not it["for"] and not it["pin"] and (today - it["since"]).days > DAYS_AGED):
                 warnings.append(ForSleep("aged item to move to its record", f"{label}: aged, since {it['since']}; move it, fields and all, to the linked record's ## Open"))
         if overdue:
             warnings.append(f"BOARD.md: {overdue} item(s) overdue; the opening asks {NAME}")
@@ -877,6 +940,10 @@ def ref(it, area=None):
     fields = [f"since {it['since']}"] if it.get("since") else []
     fields += [f"due {'~' if it['approx'] else ''}{it['due']}"] if it.get("due") else []
     fields += [f"for {it['for']}"] if it.get("for") else []
+    fields += [f"last {it['last']}"] if it.get("last") else []
+    fields += [f"prep {it['prep']}"] if it.get("prep") else []
+    fields += [f"every {it['every']}"] if it.get("every") else []
+    fields += ["pin"] if it.get("pin") else []
     where = f"[{area}] " if area else ""
     pending = " (pending capture, not yet consolidated)" if it.get("noted") else ""
     return f"{where}({it['section']}) {it['text']}" + "".join(f" | {f}" for f in fields) + pending
@@ -914,6 +981,8 @@ def when(it, today):
     """The item's due date or, without one, since when it has waited."""
     if it["due"]:
         return short_date(it["due"], today, it["approx"])
+    if it.get("last"):
+        return f"last news {short_date(it['last'], today)}"
     return f"since {short_date(it['since'], today)}" if it["since"] else "no date"
 
 
@@ -922,10 +991,12 @@ def noted(it, today):
 
 
 def follow_ups(items, today):
-    """Waiting on others, overdue or with no news for over DAYS_FOLLOW_UP days: time to nudge."""
-    news = lambda it: max([d for d in (it["since"], it.get("noted")) if d], default=None)
+    """Waiting on others, overdue or with no news for over DAYS_FOLLOW_UP days: time to nudge. A nudge or any news
+    (`last`) buys those days, overdue or not, so it doesn't ask for another one the next morning."""
+    news = lambda it: max([d for d in (it["since"], it.get("noted"), it.get("last")) if d], default=None)
+    recent = lambda it: bool(it.get("last")) and (today - it["last"]).days <= DAYS_FOLLOW_UP
     late = [it for it in items if it["section"] == OTHERS and (
-        it["due"] < today if it["due"] else bool(news(it)) and (today - news(it)).days > DAYS_FOLLOW_UP)]
+        it["due"] < today and not recent(it) if it["due"] else bool(news(it)) and (today - news(it)).days > DAYS_FOLLOW_UP)]
     return sorted(late, key=lambda it: it["due"] or news(it) or dt.date.min)
 
 
@@ -981,9 +1052,16 @@ def waits_on_owner(it):
 
 
 def undated(items):
-    """<name>'s to-dos and questions with no due date and nobody waiting: nothing else brings them back. Oldest first."""
-    rows = [it for it in items if it["section"] in ("Loose ends", "Questions for") and not it["due"] and not it["for"]]
+    """<name>'s to-dos and questions with no due date, nobody waiting and no pin: nothing else brings them back.
+    Oldest first."""
+    rows = [it for it in items if it["section"] in ("Loose ends", "Questions for") and not it["due"] and not it["for"] and not it["pin"]]
     return sorted(rows, key=lambda it: it["since"] or dt.date.min)
+
+
+def in_sight(it, today):
+    """A due date to show now: within DAYS_NEXT days, or up to the item's own `prep` days ahead."""
+    days = (it["due"] - today).days
+    return days < DAYS_NEXT or days <= (it.get("prep") or -1)
 
 
 def in_turn(rows, today, limit=UNDATED_ITEMS):
@@ -1106,9 +1184,11 @@ def opening(root, area, extra=(), describe=str):
     dated = sorted((it for it in items if it["due"]), key=lambda it: it["due"])
     overdue = [it for it in dated if it["due"] < today and it["section"] != OTHERS]
     upcoming = [it for it in dated if it["due"] >= today]
-    week = ([it for it in upcoming if (it["due"] - today).days < DAYS_NEXT]
-            or [it for it in upcoming[:1] if (it["due"] - today).days <= DAYS_AHEAD])
-    follow = follow_ups(items, today)
+    week = [it for it in upcoming if (it["due"] - today).days < DAYS_NEXT]
+    ahead = [it for it in upcoming if it not in week and in_sight(it, today)]  # a block of their own: a busy week would bury them
+    week = week or [it for it in upcoming[:1] if (it["due"] - today).days <= DAYS_AHEAD and it not in ahead]
+    pinned = [it for it in items if it["pin"] and it not in overdue + week + ahead]
+    follow = [it for it in follow_ups(items, today) if it not in pinned]
     waiting = sorted((it for it in items if waits_on_owner(it)),  # first due, then who waits the longest
                      key=lambda it: (it["due"] is None, it["due"] or it["since"] or dt.date.min))
     loose = undated(items)
@@ -1122,15 +1202,19 @@ def opening(root, area, extra=(), describe=str):
     if notes:
         blocks.append(block("🎯 **Attention**" + (f" (sleep of {short_date(made, today)})" if made else ""), notes, limit=ATTENTION_MAX))
     line = lambda it: f"{when(it, today)} · {describe(gist(it['text']))}{noted(it, today)}"
+    if pinned:
+        blocks.append(n.block(f"📌 **You asked not to forget** ({len(pinned)})", [entry(it, line(it)) for it in pinned]))
     if overdue:
         blocks.append(n.block("🔴 **Overdue** (done, postpone or drop?)", [entry(it, line(it)) for it in overdue]))
     if week:
         title = "📅 **Next due**" if len(week) == 1 else f"📅 **Next due dates** ({len(week)})"
         blocks.append(n.block(title, [entry(it, line(it)) for it in week]))
+    if ahead:
+        blocks.append(n.block(f"🔭 **Coming up, as you asked** ({len(ahead)})", [entry(it, line(it)) for it in ahead]))
     if follow:
         blocks.append(n.block(f"🔁 **Follow up** ({len(follow)}; nudge?)", [entry(it, line(it)) for it in follow]))
     blocks += list(extra)
-    waiting = [it for it in waiting if it not in overdue + week]  # already numbered above
+    waiting = [it for it in waiting if it not in overdue + week + ahead + pinned]  # already numbered above
     if waiting:
         due = lambda it: f"{short_date(it['due'], today, it['approx'])} · " if it["due"] else ""
         blocks.append(n.block(f"⏳ **Waiting on you** ({len(waiting)})", [entry(
@@ -1139,7 +1223,8 @@ def opening(root, area, extra=(), describe=str):
         blocks.append(n.block(f"🕸️ **Without a date** ({len(loose)}; do, date or drop?)",
                               [entry(it, line(it)) for it in in_turn(loose, today)]))
     limit = today + dt.timedelta(days=DAYS_OTHER_AREAS)
-    others = [p for p in due_items(root, [a for a in areas(root) if a != area.name]) if p[0] <= limit]
+    others = [p for p in due_items(root, [a for a in areas(root) if a != area.name])
+              if p[0] <= limit or (p[3]["prep"] and in_sight(p[3], today))]
     summary = []
     for a in [x for x in areas(root) if x != area.name]:
         late = [p for p in others if p[2] == a and p[0] < today and p[3]["section"] != OTHERS]
@@ -1228,6 +1313,8 @@ def area_state(root, area):
     loose = undated(items)
     fields = lambda it: ((f" | since {it['since']}" if it["since"] else "")
                          + (f" | due {'~' if it['approx'] else ''}{it['due']}" if it["due"] else "")
+                         + (f" | last {it['last']}" if it["last"] else "") + (f" | prep {it['prep']}" if it["prep"] else "")
+                         + (f" | every {it['every']}" if it["every"] else "") + (" | pin" if it["pin"] else "")
                          + (" (from a pending capture)" if it.get("noted") else ""))
     out = ["---", "type: state", f"area: {area.name}", f"generated: {now()}",
            f"system_version: {VERSION}", "---",
@@ -1241,8 +1328,11 @@ def area_state(root, area):
     out += [f"  - {short(it['text'])}{fields(it)}" for it in others]
     turn = in_turn(loose, today)
     out += [f"- Without a date ({len(loose)}, oldest first; the opening shows this turn's):" + ("" if loose else " none")]
-    out += [f"  - {short(it['text'])}{fields(it)}{' (this turn)' if it in turn else ''}" for it in loose] + ["- Due dates:"]
+    out += [f"  - {short(it['text'])}{fields(it)}{' (this turn)' if it in turn else ''}" for it in loose]
+    out += [f"- Pinned, {NAME} asked not to forget ({sum(it['pin'] for it in items)}):"]
+    out += [f"  - {short(it['text'])}{fields(it)}" for it in items if it["pin"]] + ["- Due dates:"]
     out += [f"  - {'~' if a else ''}{d} · {short(it['text'])}{THEIRS if it['section'] == OTHERS else ''}"
+            + (f" (show {it['prep']} days ahead)" if it["prep"] else "")
             for d, a, _, it in due_items(root, [area.name])] or ["  - none"]
     review = review_items(area, today)
     out += ["", "## Review (the opening's \"Also\" line and the weekly review)", f"- Also: {also(review) or 'none'}"]
@@ -1288,17 +1378,20 @@ def core_state(root, ids):
            "# View of all areas (generated by sleep; do not edit)", ""]
     notes = [f"- [{name}] {l}" for name in areas(root) for l in attention(Area(root, name))[0]]
     out += ["## Attention, all areas"] + (notes or ["- none"]) + [""]
-    waiting, others, loose, status = [], [], [], []
+    waiting, others, loose, pins, status = [], [], [], [], []
     for name in areas(root):
         a = Area(root, name)
         items = open_items(a)
         for it in items:
             since = f" (since {it['since']})" if it["since"] else ""
             due = f" (due {it['due']})" if it["due"] else ""
+            last = f" (last news {it['last']})" if it["last"] else ""
             if waits_on_owner(it):
                 waiting.append(f"- [{name}] {it['text']}{since}")
             elif it["section"] == OTHERS:
-                others.append(f"- [{name}] {it['text']}{since}{due}")
+                others.append(f"- [{name}] {it['text']}{since}{due}{last}")
+            if it["pin"]:
+                pins.append(f"- [{name}] {it['text']}{since}{due}")
         loose += [f"- [{name}] {it['text']}" + (f" (since {it['since']})" if it["since"] else "") for it in undated(items)]
         st = a.file("STATE.md")
         generated = st[0].get("generated", "never") if st else "never"
@@ -1307,11 +1400,13 @@ def core_state(root, ids):
     status.append(f"- core: inbox with {len(core.inbox)} capture(s)")
     out += [f"## Due dates, all areas (by date; overdue = before today; computed on {today})"]
     out += [f"- {'~' if ap else ''}{d} [{n}] {it['text']}{THEIRS if it['section'] == OTHERS else ''}"
+            + (f" (show {it['prep']} days ahead)" if it["prep"] else "")
             for d, ap, n, it in due_items(root, areas(root))] or ["- none"]
     out += ["", f"## Waiting on {NAME}, all areas"] + (waiting or ["- none"])
     out += ["", f"## Waiting on others, all areas (follow up when overdue or quiet for {DAYS_FOLLOW_UP} days)"]
     out += others or ["- none"]
     out += ["", "## Without a date, all areas"] + (loose or ["- none"])
+    out += ["", f"## Pinned, {NAME} asked not to forget, all areas"] + (pins or ["- none"])
     out += ["", "## Status"] + status
     state = "\n".join(out) + "\n"
 
@@ -1342,24 +1437,30 @@ def brief(root, until=None):
     dated = sorted(((a, it) for a, it in rows if it["due"]), key=lambda x: x[1]["due"])
     overdue = [(a, it) for a, it in dated if it["due"] < today and it["section"] != OTHERS]
     soon = [(a, it) for a, it in dated if today <= it["due"] <= end]
-    follow = [(a, it) for a, it in rows if it in follow_ups([it], today)]
+    ahead = [(a, it) for a, it in dated if not until and it["due"] > end and in_sight(it, today)]
+    pins = [(a, it) for a, it in rows if it["pin"] and (a, it) not in overdue + soon + ahead]
+    follow = [(a, it) for a, it in rows if it in follow_ups([it], today) and (a, it) not in pins]
     follow.sort(key=lambda x: x[1]["due"] or x[1]["since"] or x[1].get("noted") or dt.date.min)
     day = f"{WEEKDAYS[today.weekday()]}, {MONTHS[today.month - 1]} {today.day}"
     blocks = [f"**All areas** · {day}"]
     tops = [f"{area_title(a)} · {notes[0]}" for a in names for notes in [attention(Area(root, a), today)[0]] if notes]
     if tops:
         blocks.append(block("🎯 **Attention**", tops, limit=ATTENTION_MAX))
+    if pins:
+        blocks.append(n.block(f"📌 **You asked not to forget** ({len(pins)})", [entry(it, line(a, it), a) for a, it in pins]))
     if overdue:
         blocks.append(n.block("🔴 **Overdue** (done, postpone or drop?)", [entry(it, line(a, it), a) for a, it in overdue]))
     title = f"until {short_date(end, today)}" if until else f"next {DAYS_NEXT} days"
     later = [it["due"] for _, it in dated if max(end, today) < it["due"] and (it["due"] - today).days <= DAYS_AHEAD]
-    after = [(a, it) for a, it in dated if later and it["due"] == later[0]]  # every item of the next due day
+    after = [(a, it) for a, it in dated if later and it["due"] == later[0] and (a, it) not in ahead]  # every item of the next due day
     if soon:
         blocks.append(n.block(f"📅 **Due dates, {title}** ({len(soon)})", [entry(it, line(a, it), a) for a, it in soon]))
     elif after:  # nothing in the range: the next one, so "nothing" doesn't hide tomorrow
         blocks.append(n.block(f"📅 **Due dates, {title}:** none. **Next**", [entry(it, line(a, it), a) for a, it in after]))
     else:
         blocks.append(f"📅 **Due dates, {title}:** none.")
+    if ahead:
+        blocks.append(n.block(f"🔭 **Coming up, as you asked** ({len(ahead)})", [entry(it, line(a, it), a) for a, it in ahead]))
     if follow:
         blocks.append(n.block(f"🔁 **Follow up** ({len(follow)}; nudge?)", [entry(it, line(a, it), a) for a, it in follow]))
     cold = sorted(((a, it) for a, it in rows if it in undated([it])), key=lambda x: x[1]["since"] or dt.date.min)
@@ -1530,6 +1631,65 @@ def archive_log(area, today):
     return sum(len(v) for v in moved.values())
 
 
+# ---------- capture ----------
+
+def capture_problems(body):
+    """What would make the opening read a capture wrong, or lose it: sections outside the template, malformed fields,
+    a due date left in the text, a closing word other than "Done:", a secret. To fix before it is written."""
+    problems = []
+    if not body.strip():
+        problems.append("empty body")
+    if body.lstrip().startswith("---"):
+        problems.append("send only the body: the frontmatter is written here")
+    outside = [t for t in re.findall(r"^#+ *(.*?)\s*$", body, re.M) if t not in CAPTURE_SECTIONS]
+    if outside:
+        problems.append(f"sections outside the template ({'; '.join(outside)}): only {', '.join(CAPTURE_SECTIONS)}")
+    if SECRETS.search(body):
+        problems.append("looks like it holds a secret; memory never stores one")
+    for l in section(body, "To-dos") + section(body, "Questions"):
+        it = board_item("", l)
+        label = f"'{clean(l[2:])[:50]}'"
+        if NOT_DONE.match(l):
+            problems.append(f"{label}: a closed to-do starts with '- Done:'")
+        problems += [f"{label}: {e}" for e in it["errors"]]
+        if it["every"] and not it["due"]:
+            problems.append(f"{label}: 'every' needs '| due'")
+        if not DONE.match(l) and not it["due"]:
+            loose = dates_in_text(it["text"]) + later_dates(it["text"], local_today())
+            if loose:
+                problems.append(f"{label}: due date in the text ({', '.join(dict.fromkeys(loose))}); use '| due YYYY-MM-DD'")
+    return problems
+
+
+def write_capture(root, area, origin, topic, body, forget=False):
+    """Writes a capture from its body: names the file, stamps the time to the second, so sessions in the same minute
+    keep their order, and never overwrites another session's file. Refuses what capture_problems finds: nothing is
+    written, and the agent fixes it on the spot, while the person is still there to ask."""
+    problems = ([] if origin in ORIGINS else [f"invalid origin ({origin}): {', '.join(sorted(ORIGINS))}"]) + capture_problems(body)
+    if problems:
+        print("nothing written; fix and repeat:")
+        for p in problems:
+            print(f"- {p}")
+        return 1
+    stamp = dt.datetime.now(TZ)
+    slug = re.sub(r"[^a-z0-9]+", "-", fold(topic))[:60].strip("-") or "capture"
+    folder = root / "inbox" / area.name
+    folder.mkdir(parents=True, exist_ok=True)
+    head = (f"---\ntype: capture\narea: {area.name}\ndate: {stamp:%Y-%m-%dT%H:%M:%S}\norigin: {origin}\n"
+            f"mode: {'forget' if forget else 'normal'}\n---\n")
+    n = 1
+    while True:
+        f = folder / f"{stamp:%Y%m%d-%H%M}-{origin}-{slug}{'' if n == 1 else f'-{n}'}.md"
+        try:
+            with open(f, "x", encoding="utf-8") as out:
+                out.write(head + body.strip() + "\n")
+            break
+        except FileExistsError:
+            n += 1
+    print(f"written inbox/{area.name}/{f.name}")
+    return 0
+
+
 # ---------- new memory and areas ----------
 
 def from_template(src, dest, name, today, fields=(), area=None):
@@ -1662,7 +1822,7 @@ def lost_items(area, captures):
     if not (area.folder / "BOARD.md").exists():
         return []
     mine = [f for f in captures if f.parent.name == area.name and read(f)[0].get("mode") != "forget"]
-    closed = [(f.name, d.group(1)) for f in mine for l in section(read(f)[1], "To-dos") for d in [DONE.match(l)] if d]
+    closed = [(f.name, board_item("", f"- {d.group(1)}")["text"]) for f in mine for l in section(read(f)[1], "To-dos") for d in [DONE.match(l)] if d]
     kept = [it["text"] for it in board_items(area.file("BOARD.md")[1])]
     kept += [l[2:] for _, _, body in area.records.values() for part in ("Open", "Addenda") for l in section(body, part)]
     logged = []
@@ -1760,6 +1920,9 @@ def main(argv):
     if cmd in ("state", "opening", "review", "index", "context", "fidelity", "person", "digest", "archive") and len(argv) < (5 if cmd == "context" else 4):
         print(__doc__)
         return 2
+    if cmd == "capture" and len(argv) < 6:
+        print(__doc__)
+        return 2
     if cmd in WITH_AREA and len(argv) > 3 and not argv[3].startswith("--") and not (cmd in ("validate", "review") and argv[3] == "all"):
         argv[3] = area_from_argument(root, argv[3])
     if cmd in ("state", "opening", "review") and argv[3] == "core":
@@ -1832,6 +1995,10 @@ def main(argv):
         return context(root, Area(root, argv[3]), argv[4])
     if cmd == "fidelity":
         return fidelity(root, Area(root, argv[3]), set(argv[4:]))
+    if cmd == "capture":
+        if hasattr(sys.stdin, "reconfigure"):
+            sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+        return write_capture(root, Area(root, argv[3]), argv[4], argv[5], sys.stdin.read() if sys.stdin else "", "--forget" in argv)
     if cmd == "digest":
         print(digest(root, Area(root, argv[3])))
         return 0

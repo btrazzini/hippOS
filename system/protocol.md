@@ -1,6 +1,6 @@
 ---
 type: protocol
-version: 0.2.2
+version: 0.3.0
 ---
 # hippOS memory protocol
 
@@ -45,7 +45,7 @@ Area = folder in `areas/`. Slug = file name without `.md`, unique within the are
 - The connector creates files but cannot edit the content of a `.md`. So:
   - Capture: always a new file (`create_file`, `contentMimeType: text/markdown`, `disableConversionToGoogleType: true`, `parentId` of the inbox folder).
   - Curated record: only sleep changes it. Without local access, change = create the new file with the same title in the same folder, then trash the old one. Never leave two files with the same title.
-- Local mode (preferred when available): with a shell, `python3 memory.py root` prints the root synced by Google Drive for desktop (Mac or Windows). If it prints one, read, search (`rg`), capture (new file in the inbox folder) and, during sleep, edit directly there; Drive syncs by itself. The ids, `MAP.md` and the search rules above apply only to connector mode.
+- Local mode (preferred when available): with a shell, `python3 memory.py root` prints the root synced by Google Drive for desktop (Mac or Windows). If it prints one, read, search (`rg`), capture (`memory.py capture <root> <area> <origin> <topic>`, the body on stdin: it names the file, stamps the time and refuses malformed fields) and, during sleep, edit directly there; Drive syncs by itself. The ids, `MAP.md` and the search rules above apply only to connector mode.
 
 ## Frontmatter schema
 - initiative: `type title status{active|paused|done|cancelled} priority{high|medium|low|tbd} owner verified(YYYY-MM-DD) next(1 line) depends_on[] unblocks[] decisions[] refs[]`
@@ -55,16 +55,20 @@ Area = folder in `areas/`. Slug = file name without `.md`, unique within the are
 - person: `type title updated areas[]`
 - area (`AREA.md`): `type title updated aliases[]`. Aliases are short names accepted in place of the area name (e.g., `wrk`); unique across all areas; `MAP.md` lists them.
 - Dates and times always in the `timezone` of `PROFILE.md` (e.g., America/New_York).
-- capture: `type area date(YYYY-MM-DDTHH:MM) origin{claude-chat|claude-code|codex|other} mode{normal|forget}`. `origin` is the product in use: `claude-chat` in the Claude app (desktop or phone), `claude-code` in Claude Code (terminal, app or cloud), `codex` in Codex.
+- capture: `type area date(YYYY-MM-DDTHH:MM[:SS]) origin{claude-chat|claude-code|codex|other} mode{normal|forget}`. `origin` is the product in use: `claude-chat` in the Claude app (desktop or phone), `claude-code` in Claude Code (terminal, app or cloud), `codex` in Codex.
 - `confirmed`: `yes` = recorded with <name> in this memory (proposals included); `inherited` = came from another source, unconfirmed. Independent of `status`.
 
 Body in short bullets. Initiative: `## State`, `## Risks`, `## Open`, `## Notes`. Decision: `## Context`, `## Decision`, `## Rationale`, `## Consequences`, `## Alternatives`, `## Outcome`, `## Addenda`. Topic and person: `## Facts`, `## Open`. Empty sections are omitted.
 
 ## Board items
 In "Waiting on <name>" (someone waits on <name>), "Waiting on others" (what <name> waits for, as `Who: what`), "Loose ends" (<name>'s to-dos) and "Questions for <name>", one item per line:
-`- <what> [markers] [[slug]] | since YYYY-MM-DD | due YYYY-MM-DD | for <who>`
+`- <what> [markers] [[slug]] | since YYYY-MM-DD | due YYYY-MM-DD | for <who> | last YYYY-MM-DD | prep N | every month | pin`
 - `since` (required): day the item entered the board. `due` (optional): one per item; `due ~YYYY-MM-DD` when approximate ("around"). Two due dates are two items. A due date never lives only in the text (the validator flags it).
 - `for` (optional): the person <name> owes the item to, by the name <name> uses (e.g., `for Diego (Acme)`). Answers "what do I owe Diego?".
+- `last` (optional): day of the latest nudge or news on the item; the follow-up waits 7 days from it.
+- `prep N` (optional): shows the due date N days ahead, when 7 are too few (a contract notice, a speech).
+- `every [n] day|week|month|year` (optional, with `due`): it recurs. `- Done:` keeps it on the board, `due` on the first occurrence after both the current `due` and the day done, `last` on the day done; `- Dropped:` ends it.
+- `pin` (optional): <name> asked not to forget it; in every opening until closed.
 - Section with no items: `- none`.
 - `## Thread`: up to 3, one per topic, newest first: `- <topic>: <where it stopped; next step>`.
 - `## Attention`: only sleep writes it, up to 5 lines, `- <what> [recommendation YYYY-MM-DD]`; the top of the opening.
@@ -110,7 +114,7 @@ mode: normal
 ## Thread
 - <topic>: ...
 ```
-Only these sections; empty ones omitted. A to-do starts with whose it is. Every line with a marker, except in `## Thread`; without a marker, it counts as `[hypothesis]`. Cite the existing slug when there is one (`[[slug]]`); new topic without a slug: describe it, sleep decides where it goes. A resolved to-do: `- Done: <the item>`. An open question only <name> can answer, left for later ("I'll see"): `## Questions`, never only in `## Thread`, which sleep drops.
+Only these sections; empty ones omitted. A to-do starts with whose it is. Every line with a marker, except in `## Thread`; without a marker, it counts as `[hypothesis]`. Cite the existing slug when there is one (`[[slug]]`); new topic without a slug: describe it, sleep decides where it goes. A resolved to-do: `- Done: <the item>`; given up: `- Dropped: <the item>`. An open question only <name> can answer, left for later ("I'll see"): `## Questions`, never only in `## Thread`, which sleep drops.
 
 Read before asserting: the state of a topic is the curated record plus the pending captures in the area inbox. A pending capture that contradicts the curated record prevails, with the caveat "not yet consolidated". The current inbox listing prevails over the "Inbox not yet consolidated" section of `STATE.md`, which is a snapshot from the last sleep.
 
@@ -126,9 +130,9 @@ Check at the source: only when the environment reaches the source (git, gh, Sent
 - A decision with an observable effect gets `review_on`; at review, `## Outcome` with what happened. An outcome revealing a criterion of <name> becomes a line in `core/PRINCIPLES.md`.
 - `confirmed: inherited`: confirm with <name> the first time the topic comes back.
 - Validity: an active initiative with `verified` over 14 days old is rechecked at the source before stating its state, or declared "not rechecked since <date>".
-- A closed to-do (done or dropped) leaves the BOARD and becomes `- <the day>: Done: <the item>` in `LOG.md`, unless `mode: forget` removed it; a relevant outcome goes to the topic's file.
+- A closed to-do (done or dropped) leaves the BOARD, unless done with `every`, and becomes `- <the day>: Done: <the item>` in `LOG.md`, unless `mode: forget` removed it; a relevant outcome goes to the topic's file.
 - An overdue to-do stays on the BOARD; the opening asks "done, postpone or drop?" and <name>'s answer becomes a capture.
-- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due` or `for` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the opening counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays. Every `## Open` line carries `| since`, or the review misses it.
+- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due`, `for` or `pin` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the opening counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays. Every `## Open` line carries `| since`, or the review misses it.
 - A dated event (delivery, release, conversation) goes to `LOG.md`, newest on top; entries over 30 days old move to `log/`, never deleted.
 
 ## Common limits (each AREA.md adds its own)

@@ -4,7 +4,7 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.2.2)
+# hippOS sleep (v0.3.0)
 
 Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder.
 Argument: none, the normal case (sleep finds on its own what to process, step 0), or an area or `core`, to limit itself to it.
@@ -44,7 +44,7 @@ Destination of each capture line:
 
 For each capture on the list, in date order:
 1. Read the capture and the context it touches (`memory.py context`).
-2. Apply it to the curated memory per the protocol's "Lifecycle": rewrite state in the present, update `verified`/`next`, create a record only for a new topic (search first; if it exists, update it), new decision with `supersedes` when it fully contradicts or `amends` when it changes only a part, `## Outcome` when it brings a result, to-dos and questions in `BOARD.md` with `| since` and `| due`, dated line in `LOG.md`.
+2. Apply it to the curated memory per the protocol's "Lifecycle": rewrite state in the present, update `verified`/`next`, create a record only for a new topic (search first; if it exists, update it), new decision with `supersedes` when it fully contradicts or `amends` when it changes only a part, `## Outcome` when it brings a result, to-dos and questions in `BOARD.md` with `| since`, `| due` and any other field they bring (one naming an item updates it), dated line in `LOG.md`.
 3. `mode: forget`: remove from the curated memory what was asked and what depended only on it.
 4. Service preference or decision criterion: `core/PREFERENCES.md` or `core/PRINCIPLES.md`, with `[<name> date]`. What the protocol or the assistant skill already say is not repeated there; what contradicts them goes in anyway, being <name>'s latest word, and is reported in the reply as an adjustment to make in the system.
 5. A doubt only <name> can settle (where it fits, whether something was approved, captures that contradict each other; a later one that changes an earlier one is an update): don't decide; it becomes an item in the board's `## Questions for <name>`, citing the capture.
@@ -55,7 +55,7 @@ Old notes, in any run:
 - `.md` outside the schema (validator warning): a capture without a template; if nothing fits, `topics/`. Trashed with the others, named in the CHANGELOG. Not memory: moves to `drafts/`. In doubt: a question citing the file, which leaves the list and stays.
 - `since` (item or `## Open` line) or `verified` missing: the line's marker date, else the record's `updated` or `verified`, else the file's date with `[inherited <today>: date estimated]`. Never today's as if it were new.
 
-Full pass (`pending` says "memory at version ...", or <name> asks): also read every record and the board, touched or not, and bring them to the current format. No marker: `[inherited <today>: earlier version]`, never `[<name> ...]`. A deadline in words: `| due ~<date>`, counted from `since`; unsettled, a question. Nothing dropped, nothing invented.
+Full pass (`pending` says "memory at version ...", or <name> asks): also read every record and the board, touched or not, and bring them to the current format. No marker: `[inherited <today>: earlier version]`, never `[<name> ...]`. A deadline in words: `| due ~<date>`, counted from `since`; unsettled, a question. A recurrence in words: `| every`, with the next `| due`. A recorded nudge: `| last`. "Don't forget": `| pin`. Nothing dropped, nothing invented.
 
 Attention, last of this phase, in every area: `python3 memory.py digest <root> <area>`. A date it lists only in a record: if it is a commitment, a board item with `| due` linked to the record, for its `owner`, with the line's marker (none: `[inherited <today>: record]`); unclear, a question. Then rewrite `## Attention` in `BOARD.md`, up to 5 lines of 25 words, addressed to <name>, most important first, `- <what> [recommendation <today>]`: only what dates alone don't show, from what is recorded, such as items that collide, a deadline hanging on someone quiet, a priority without movement, a risk about to happen, a decision without follow-through. No to-dos, nothing new. Nothing to say: `- none`.
 

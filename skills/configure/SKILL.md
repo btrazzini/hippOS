@@ -2,7 +2,7 @@
 name: configure
 description: Sets up hippOS step by step, asking one question at a time - the hippOS folder in Google Drive, the person's profile, the first areas and, on a computer, the skills and the private copy of the repository. Use with /configure (or $configure in Codex), on first use, to add an area or to check the setup.
 ---
-# hippOS configure (v0.2.2)
+# hippOS configure (v0.3.0)
 
 Memory rules: `protocol.md` in this folder (read "Layers", "Root in Drive" and "Drive access"). Tools: `memory.py` in this folder (`new` and `area` build from the repository's `templates/`).
 
@@ -42,11 +42,12 @@ Create: `python3 memory.py area "<root>" <area> [alias ...]`, then fill `AREA.md
 3. Private copy, needed for Claude Code in the cloud: if `origin` is the public hippOS, offer to create it; on a yes, with `gh` logged in, `git remote rename origin upstream` and `gh repo create <name they choose> --private --source . --push`. Never push to the public repository.
 4. Cloud and chat: the Google Drive connector turned on in Claude, with the Google account that holds `hippOS`; for chat, the zip from `tools/package.sh`.
 5. Nightly sleep, so each morning's opening starts consolidated: if the environment schedules tasks (a scheduled task in the Claude desktop app, or a cloud routine with `/schedule`), offer a `/sleep` every night at an hour they choose (suggest 03:00, their timezone). On a yes, create it with the prompt `/sleep`: on the computer, with the skills linked (4.2), and say the app runs it only while open (if closed, at the next launch); in the cloud, on the private copy (4.3), with the Drive connector (4.4). Elsewhere, they run `/sleep` themselves.
-6. Close in up to 6 lines: what was created and the next step, `/assistant <area>`; conversations leave captures in the inbox, and `/sleep` consolidates them.
+6. Morning brief, so the assistant speaks first: where nightly sleep can be scheduled, offer `/assistant` with no area every morning at an hour they choose (suggest 07:30, after the sleep), created the same way. With an email connector, offer to also send it to their own address; that yes is the authorization.
+7. Close in up to 6 lines: what was created and the next step, `/assistant <area>`; conversations leave captures in the inbox, and `/sleep` consolidates them.
 
 ## 5. Existing memory
 Say what is there (areas, profile fields) and ask what they want:
 - Add an area: step 3, then step 4.1.
 - Change `name`, `timezone` or `language` in `core/PROFILE.md`: only those fields, then `python3 memory.py validate "<root>" core`.
-- Check the setup: steps 4.2 to 4.5.
+- Check the setup: steps 4.2 to 4.6.
 Anything else in the memory (board, records, preferences) is a conversation with `/assistant`, which `/sleep` consolidates.
