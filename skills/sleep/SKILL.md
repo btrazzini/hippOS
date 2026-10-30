@@ -4,7 +4,7 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.1.3)
+# hippOS sleep (v0.2.0)
 
 Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder.
 Argument: none, the normal case (sleep finds on its own what to process, step 0), or an area or `core`, to limit itself to it.
@@ -34,22 +34,22 @@ Destination of each capture line:
 | Decision | new `decisions/<YYYY-MM[-DD]>-<slug>.md`, or `## Addenda` of the existing one |
 | Domain fact, question about the topic | `topics/<slug>.md` |
 | Person who shows up in more than one area | `core/people/<slug>.md` |
-| To-do, waiting on <name>, question for <name>, priority, phase | the area's `BOARD.md` ("Board items" in the protocol) |
+| To-do (<name>'s: loose ends; someone else's: waiting on others), waiting on <name>, question for <name>, priority, phase | the area's `BOARD.md` ("Board items" in the protocol) |
 | Dated event (delivery, release, conversation) | the area's `LOG.md`, on top |
 | Mission, role, limits, sources or lookups of the area, at <name>'s request | the area's `AREA.md` |
 | How <name> wants to be served | `core/PREFERENCES.md` |
 | Who <name> is | `core/PROFILE.md` |
 | Outcome revealing a decision criterion | `core/PRINCIPLES.md`, with the origin `[[area:slug]]` |
-| `## Thread` | `## Thread` of `BOARD.md` |
+| `## Thread` | `## Thread` of `BOARD.md`, one per topic |
 
 For each capture on the list, in date order:
 1. Read the capture and the context it touches (`memory.py context`).
 2. Apply it to the curated memory per the protocol's "Lifecycle": rewrite state in the present, update `verified`/`next`, create a record only for a new topic (search first; if it exists, update it), new decision with `supersedes` when it fully contradicts or `amends` when it changes only a part, `## Outcome` when it brings a result, to-dos and questions in `BOARD.md` with `| since` and `| due`, dated line in `LOG.md`.
 3. `mode: forget`: remove from the curated memory what was asked and what depended only on it.
 4. Service preference or decision criterion: `core/PREFERENCES.md` or `core/PRINCIPLES.md`, with `[<name> date]`. What the protocol or the assistant skill already say is not repeated there; what contradicts them goes in anyway, being <name>'s latest word, and is reported in the reply as an adjustment to make in the system.
-5. A doubt only <name> can settle (where it fits, whether something was approved, contradiction between captures): don't decide; it becomes an item in the board's `## Questions for <name>`, citing the capture.
-6. Thread of the most recent capture: goes into `## Thread` of `BOARD.md` (replaces the previous one).
-Extra consolidation: `LOG.md` pruned beyond 30 days; duplicates merged; finished initiatives closed; aged item (validator warning) moved to its record per the protocol's "Lifecycle"; topic over the limit (validator warning) split: the original keeps the essentials and `links` to the new ones, without losing a line; an item whose text says who <name> owes gets `| for <who>`. An overdue to-do is not touched without a capture: the opening asks <name>.
+5. A doubt only <name> can settle (where it fits, whether something was approved, captures that contradict each other; a later one that changes an earlier one is an update): don't decide; it becomes an item in the board's `## Questions for <name>`, citing the capture.
+6. Threads: each topic's newest replaces its older one; up to 3, newest first; a finished topic leaves.
+Extra consolidation: `LOG.md` pruned beyond 30 days (keeping last contacts, per the protocol); duplicates merged; finished initiatives closed; aged item (validator warning) moved to its record per the protocol's "Lifecycle"; topic over the limit (validator warning) split: the original keeps the essentials and `links` to the new ones, without losing a line; an item whose text says who <name> owes gets `| for <who>`. An overdue to-do is not touched without a capture: the opening asks <name>.
 
 ## 2. Audit (checking phase)
 1. `python3 memory.py validate <root> <area>`: zero new errors. Fix and repeat. A pre-existing error is also fixed in this run, without asking <name>, without losing an item or changing the meaning of any.
@@ -60,7 +60,7 @@ Extra consolidation: `LOG.md` pruned beyond 30 days; duplicates merged; finished
 ## 3. Write
 1. The area's `CHANGELOG.md`, and `core/CHANGELOG.md` when the run touched core (create from the template if missing): dated entry on top with the processed captures and, per file, what changed in one line.
 2. Send to Drive only the changed files (local: already in place; connector mode: create the new one with the same title in the same folder and trash the old one only after the new one exists). Order, so that an interrupted sleep never loses data: curated first (with `BOARD.md` and `LOG.md`), then `CHANGELOG.md`.
-3. Only after that: trash the captures on the list fixed in step 0. A capture that produced a question for <name> also goes (the question is on the board).
+3. Only after that: trash the captures on the list fixed in step 0 (connector mode: also from `<work>/hippOS/inbox/`, which `state` reads). A capture that produced a question for <name> also goes (the question is on the board).
 4. `python3 memory.py state <root> <area> --write` generates `areas/<area>/STATE.md`, and `python3 memory.py core <root> --write` generates `core/STATE.md` and `MAP.md` (in connector mode, with `--ids <work>/ids.json`; locally, the ids come from Drive itself). In connector mode, send them to Drive. Check at the end that no folder has two files with the same title.
 5. Last, delete `SLEEP-IN-PROGRESS.md` (connector mode: trash it). If sleep stops midway on an error, also delete the lock before replying.
 

@@ -21,6 +21,8 @@ GitHub (your copy of hippOS)      Google Drive: hippOS/
 Setup is guided: **`/configure`** asks one question at a time and builds the memory (see "Getting started").
 
 1. **`/assistant <area>`** opens a conversation as that area's assistant. It reads the core, the area's rules and its `STATE.md`, looks up on its own what is waiting on you in the area's sources (GitHub, through `tools/lookup.py`), answers "what do I owe?", and during the conversation writes a small file to the `inbox/` per capture (decision, change of state, to-do, preference). It never changes the curated memory.
+   - **The opening** counts what other sessions have just captured (it is memory already, even before sleep) and numbers each item, so you answer "1 done, 3 on Friday". It shows what is overdue, the next due dates, what to **follow up** (what you wait on from others, overdue or quiet for a week), what waits on you, and one **Also** line for what waits without a date (questions, parked items, decisions to review, initiatives not checked). With a calendar connector, today's meetings come with what each side owes.
+   - **`/assistant`** with no area gives the brief of every area at once; on Mondays the opening offers the **weekly review** (`memory.py review`). Before you talk to someone, `memory.py person` brings everything open with them.
 2. **`/sleep`**, with no area, finds on its own what needs sleep (`memory.py pending`: captures in the inbox, old state or state from an earlier version, errors or cleanup flagged by the validator) and processes area by area, core last. With an area (`/sleep <area>`), it stays there. In each area it consolidates into the curated memory (phase 1), audits with the validator, the fidelity check and an independent reviewer (phase 2), generates the `STATE.md` files and `MAP.md`, records what changed in `CHANGELOG.md` and empties the inbox.
 
 Conversation modes: normal (captures), "just discussing" (records nothing), "forget that" (sleep removes it).
@@ -55,7 +57,7 @@ Tested on a Mac; not yet on Windows (see "Known limits").
    ./install.sh
    ```
    `install.sh` links the skills into Claude Code and Codex (`~/.claude/skills`, `~/.agents/skills` and `~/.codex/skills`).
-2. **`/configure`**, in Claude Code opened in that folder. It asks one question at a time and sets everything up: the `hippOS/` folder directly in "My Drive" (the name is fixed: it is how the assistant finds it), your profile (name, language, timezone), your first areas, and the `STATE.md` and `MAP.md` files.
+2. **`/configure`**, in Claude Code opened in that folder. It asks one question at a time and sets everything up: the `hippOS/` folder directly in "My Drive" (the name is fixed: it is how the assistant finds it), your profile (name, language, timezone), your first areas, and the `STATE.md` and `MAP.md` files; it also offers to schedule `/sleep` every night.
 3. **Your private copy.** `/configure` also offers to create it: Claude Code in the cloud only opens repositories in your account, and a fork of a public repository can't be private. Your copy can have any name; hippOS stays as `upstream`, so you update with `git pull upstream main` and `git push`. Your own tweaks (hooks in `.claude/settings.json`, your own skills) stay only in your copy, in files hippOS doesn't have, so they never conflict.
 4. **Protections** (optional): `/protect` asks what each area's assistant must never do (deploy, write to a database, take down a shared environment, edit a code folder) and writes it to the area's `AREA.md`. On your computer it also turns on the guard, a hook in `tools/guard.py` that blocks those commands, addresses and edits in sessions opened in this folder. Elsewhere they are rules the assistant follows.
 5. **Cloud and chat:** turn on the Google Drive connector in your Claude account, with the Google account that holds `hippOS/`. In the cloud, sessions open your private copy; in chat, a project that syncs your copy, or the `assistant` skill installed in your account with the zip from `tools/package.sh` (reinstall it with every version). Codex in the cloud isn't supported: its environment has no Google Drive tools.
@@ -75,11 +77,7 @@ Run `/configure` again and choose to add an area. By hand: `python3 tools/memory
 - **Windows is untested.** The skills rely on git symlinks (turn on Developer Mode or `git config core.symlinks true` before cloning), `install.sh` needs bash (Git Bash or WSL), the rules call `python3`, and correct timezones need the `tzdata` package (`pip install tzdata`).
 - **Folder ids outside a Mac.** Only Google Drive for desktop on a Mac exposes folder ids, so a local `/sleep` on Windows or Linux leaves them out of `MAP.md`; the assistant in chat and in the cloud relies on them. A `/sleep` run in the cloud (claude.ai/code) fills them in.
 - **Protections are enforced only on the computer.** The guard blocks what the lists name in sessions opened in the repository's folder; in chat, in the cloud and in other folders they are rules. Patterns are plain text, so a determined rewrite of a command can slip past; keep anything critical behind real permissions too.
-- **Sleep is manual.** You run `/sleep` yourself (see below).
-
-## Possible, not yet set up
-
-- **Automatic sleep.** A scheduled task can run `/sleep` on its own (every night, for instance) in Claude Code on your computer, in local mode, so the memory wakes up consolidated. It would also work in the cloud, through the connector, only slower.
+- **Sleep runs by itself only on a schedule.** `/configure` offers to schedule `/sleep` every night: a scheduled task in the Claude desktop app (local mode; it runs only while the app is open, or at the next launch) or a cloud routine (`/schedule`, on your private copy, through the connector, slower). Without one, you run `/sleep` yourself.
 
 ## Credits and inspiration
 

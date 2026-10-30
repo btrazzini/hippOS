@@ -23,6 +23,8 @@ GitHub (sua cópia do hippOS)      Google Drive: hippOS/
 A configuração é guiada: o **`/configure`** faz uma pergunta por vez e monta a memória (veja "Começar").
 
 1. **`/assistant <area>`** abre uma conversa como o assistente daquela área. Ele lê o núcleo (`core/`), as regras da área e o `STATE.md`, levanta sozinho nas fontes da área o que espera por você (GitHub, pelo `tools/lookup.py`), responde "o que eu devo?" e, durante a conversa, grava no `inbox/` um arquivo pequeno por captura (decisão, mudança de estado, pendência, preferência). Nunca altera a memória curada.
+   - **A abertura** conta o que outras sessões acabaram de anotar (já é memória, mesmo antes do sono) e numera cada item, para você responder "1 feito, 3 na sexta". Mostra o que está atrasado, os próximos prazos, o que **cobrar** (o que você espera dos outros, atrasado ou parado há uma semana), o que espera por você e uma linha **Também** com o que espera sem data (perguntas, itens estacionados, decisões a revisar, iniciativas sem conferência). Com o conector de calendário, as reuniões do dia vêm com o que cada lado deve.
+   - **`/assistant`** sem área dá o resumo de todas as áreas de uma vez; às segundas, a abertura oferece a **revisão semanal** (`memory.py review`). Antes de você falar com alguém, o `memory.py person` traz tudo o que está aberto com a pessoa.
 2. **`/sleep`**, sem área, acha sozinho o que precisa de sono (`memory.py pending`: capturas no inbox, estado velho ou de versão anterior, erro ou arrumação apontada pelo validador) e processa área por área, núcleo por último. Com uma área (`/sleep <area>`), fica só nela. Em cada área: consolida na memória curada (fase 1), fiscaliza com o validador, a conferência de fidelidade e um revisor independente (fase 2), gera os `STATE.md` e o `MAP.md`, registra o que mudou no `CHANGELOG.md` e esvazia o inbox.
 
 Modos da conversa: normal (captura), "só discutindo" (não grava nada), "esquece isso" (o sono remove).
@@ -55,7 +57,7 @@ Testado no Mac; no Windows, ainda não (veja "Limites conhecidos").
    ./install.sh
    ```
    O `install.sh` liga as skills no Claude Code e no Codex (`~/.claude/skills`, `~/.agents/skills` e `~/.codex/skills`).
-2. **`/configure`**, no Claude Code aberto nessa pasta. Ele faz uma pergunta por vez e monta tudo: a pasta `hippOS/` direto em "Meu Drive" (o nome é fixo: é por ele que o assistente a acha), o seu perfil (nome, idioma, fuso horário), as primeiras áreas e os arquivos `STATE.md` e `MAP.md`. Para respostas em português, escolha `pt-BR` como idioma.
+2. **`/configure`**, no Claude Code aberto nessa pasta. Ele faz uma pergunta por vez e monta tudo: a pasta `hippOS/` direto em "Meu Drive" (o nome é fixo: é por ele que o assistente a acha), o seu perfil (nome, idioma, fuso horário), as primeiras áreas e os arquivos `STATE.md` e `MAP.md`, e oferece agendar o `/sleep` toda noite. Para respostas em português, escolha `pt-BR` como idioma.
 3. **Sua cópia privada.** O `/configure` também oferece criá-la: o Claude Code na nuvem só abre repositórios da sua conta, e um fork de repositório público não pode ser privado. A sua cópia pode ter qualquer nome; o hippOS fica como `upstream`, e você atualiza com `git pull upstream main` e `git push`. Os seus ajustes (hooks no `.claude/settings.json`, skills suas) ficam só na sua cópia, em arquivos que o hippOS não tem, e nunca dão conflito.
 4. **Proteções** (opcional): o `/protect` pergunta o que o assistente de cada área nunca pode fazer (deploy, gravar num banco, derrubar um ambiente compartilhado, editar uma pasta de código) e grava isso no `AREA.md` da área. No seu computador, ele também liga o guarda, um hook em `tools/guard.py` que bloqueia esses comandos, endereços e edições nas sessões abertas nesta pasta. Fora daí, são regras que o assistente segue.
 5. **Nuvem e chat:** ligue o conector do Google Drive na sua conta do Claude, com a conta Google onde a pasta `hippOS/` está. Na nuvem, as sessões abrem a sua cópia privada; no chat, um projeto que sincroniza a sua cópia, ou a skill `assistant` instalada na sua conta com o zip de `tools/package.sh` (reinstale a cada versão). O Codex na nuvem não é suportado: o ambiente dele não tem as ferramentas do Google Drive.
@@ -75,11 +77,7 @@ Rode o `/configure` de novo e escolha adicionar uma área. À mão: `python3 too
 - **Windows não foi testado.** As skills usam links simbólicos do git (ligue o Modo de Desenvolvedor ou rode `git config core.symlinks true` antes de clonar), o `install.sh` precisa de bash (Git Bash ou WSL), as regras chamam `python3` e, para o fuso horário sair certo, é preciso o pacote `tzdata` (`pip install tzdata`).
 - **Ids das pastas fora do Mac.** Só o Google Drive para desktop no Mac expõe os ids das pastas, então um `/sleep` local no Windows ou no Linux os deixa fora do `MAP.md`; o assistente no chat e na nuvem depende deles. Um `/sleep` rodado na nuvem (claude.ai/code) os preenche.
 - **As proteções só são garantidas no computador.** O guarda bloqueia o que as listas citam nas sessões abertas na pasta do repositório; no chat, na nuvem e em outras pastas, são regras. Os padrões são texto simples, então um comando reescrito de propósito pode escapar; mantenha o que for crítico também atrás de permissões de verdade.
-- **O sono é manual.** Você mesmo roda o `/sleep` (veja abaixo).
-
-## Possível, ainda não configurado
-
-- **Sono automático.** Uma tarefa agendada pode rodar o `/sleep` sozinha (toda noite, por exemplo) no Claude Code do seu computador, em modo local, e a memória amanhece consolidada. Na nuvem também funcionaria, pelo conector, só que mais devagar.
+- **O sono só roda sozinho se estiver agendado.** O `/configure` oferece agendar o `/sleep` toda noite: uma tarefa agendada no app do Claude no computador (modo local; só roda com o app aberto, ou na próxima vez que ele abrir) ou uma rotina na nuvem (`/schedule`, na sua cópia privada, pelo conector, mais devagar). Sem isso, você mesmo roda o `/sleep`.
 
 ## Créditos e inspiração
 

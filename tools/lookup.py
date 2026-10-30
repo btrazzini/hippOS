@@ -188,13 +188,13 @@ def owe(root, area):
             blocks.append(m.block(f"**{label}** ({len(items)})", lines, tags, OWE_ITEMS) if items
                           else f"**{label}:** no PR requesting your review.")
             continue
-        waiting = sorted((it for it in items if it["waiting"]), key=lambda it: it["when"], reverse=True)
+        theirs = sorted((it for it in items if it["waiting"]), key=lambda it: it["when"], reverse=True)
         stalled = sum(1 for it in items if (today - it["when"]).days > DAYS_STALLED)
-        heading = f"**{label}** ({len(items)}) · " + (f"{len(waiting)} waiting on you" if waiting else "none waiting on you")
+        heading = f"**{label}** ({len(items)}) · " + (f"{len(theirs)} waiting on you" if theirs else "none waiting on you")
         if stalled:
             heading += f" · {stalled} stalled for over {DAYS_STALLED} days"
-        blocks.append(m.block(heading, [line(it, "", names, today) for it in waiting],
-                              [f"#{it['n']} {title(it['title'], m.TAG_MAX)}" for it in waiting], OWE_ITEMS))
+        blocks.append(m.block(heading, [line(it, "", names, today) for it in theirs],
+                              [f"#{it['n']} {title(it['title'], m.TAG_MAX)}" for it in theirs], OWE_ITEMS))
     if error:
         blocks.append(f"**GitHub:** couldn't check ({error}).")
     if todos:
@@ -202,7 +202,7 @@ def owe(root, area):
                               [m.tag(it["text"]) for it in todos], OWE_ITEMS))
     if waiting:
         blocks.append(f"**Waiting on you:** {waiting}")
-    return "\n\n".join(blocks)
+    return "\n\n".join(blocks) + "\n\n" + m.for_agent()
 
 
 def main(argv):

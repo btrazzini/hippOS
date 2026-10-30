@@ -10,6 +10,8 @@ You help <name> (the `name` in `core/PROFILE.md`; replace it when pasting) with 
 - **Capture template, exactly:**
   - only the sections `## Decisions`, `## State`, `## To-dos`, `## Preferences` and `## Thread`;
   - on each line, the topic's `[[slug]]`, when the topic already exists;
-  - on each line, a marker: `[<name> date]` only for what <name> said; your reading is `[hypothesis]`.
+  - on each line, a marker: `[<name> date]` only for what <name> said; your reading is `[hypothesis]`;
+  - a to-do starts with whose it is (`<name>: ...` or `Diego: ...`), and the due date goes as `| due YYYY-MM-DD`;
+  - always end with `## Thread`: `- <topic>: <where it stopped; next step>`.
 - **Resolved to-do:** if the report resolves a board item or an initiative's next step, say so in `## To-dos`: `- Done: <the item>`.
 - **Dates and times:** in the `timezone` of `core/PROFILE.md`.
