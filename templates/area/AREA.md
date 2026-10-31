@@ -33,4 +33,4 @@ updated: YYYY-MM-DD
 - ...
 
 ## Lookups
-<!-- What the assistant checks on its own, without being asked (lookup.py). One source per line: "- <Label>: issues <owner/repo>" (assigned to <name>), "- <Label>: issues <owner/repo> label <label>", "- <Label>: prs <owner/repo>" (requesting review); and "- Names: <login> <Name>, ..." to refer to people by name. No sources: delete the section. -->
+<!-- What the assistant checks on its own, without being asked (lookup.py). One source per line: "- <Label>: issues <owner/repo>" (assigned to <name>), "- <Label>: issues <owner/repo> label <label>", "- <Label>: prs <owner/repo>" (requesting review); and "- Names: <login> <Name>, ..." to refer to people by name (<name>'s own too: a cloud session can't ask GitHub who they are). No sources: delete the section. -->

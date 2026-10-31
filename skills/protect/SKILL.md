@@ -2,7 +2,7 @@
 name: protect
 description: Sets up what each area's assistant must never do, asking one question at a time - commands it must never run, addresses it must never open, folders it may only read - writes them to the area's AREA.md and, on the computer, turns on the hippOS guard, a hook that blocks them. Use with /protect (or $protect in Codex), or "set up the protections".
 ---
-# hippOS protect (v0.3.1)
+# hippOS protect (v0.3.2)
 
 Memory rules: `protocol.md` in this folder. Tools: `memory.py` and `guard.py` in this folder; `python3 guard.py` with no argument shows its help.
 

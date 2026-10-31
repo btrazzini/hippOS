@@ -2,7 +2,7 @@
 name: configure
 description: Sets up hippOS step by step, asking one question at a time - the hippOS folder in Google Drive, the person's profile, the first areas and, on a computer, the skills and the private copy of the repository. Use with /configure (or $configure in Codex), on first use, to add an area or to check the setup.
 ---
-# hippOS configure (v0.3.1)
+# hippOS configure (v0.3.2)
 
 Memory rules: `protocol.md` in this folder (read "Layers", "Root in Drive" and "Drive access"). Tools: `memory.py` in this folder (`new` and `area` build from the repository's `templates/`).
 
@@ -32,7 +32,7 @@ Ask which areas of life to start with (suggest common ones, such as work, person
 - Mission in one line, and what success looks like.
 - The assistant's role: what it does and what it doesn't.
 - Limits (what it must never do) and sources it should know (tools, repositories, documents).
-- GitHub lookups, only if they use GitHub for this area and `gh auth status` is logged in: which repositories, and whether to watch issues assigned to them, issues with a label, or PRs requesting their review (format in the `## Lookups` comment of `templates/area/AREA.md`), plus the people's logins and names.
+- GitHub lookups, only if they use GitHub for this area and `gh auth status` is logged in: which repositories, and whether to watch issues assigned to them, issues with a label, or PRs requesting their review (format in the `## Lookups` comment of `templates/area/AREA.md`), plus their own and the people's logins and names.
 
 Create: `python3 memory.py area "<root>" <area> [alias ...]`, then fill `AREA.md` with the answers, in their words; a section they skipped keeps the template's `...`.
 

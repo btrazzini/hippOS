@@ -9,6 +9,8 @@ The assistant runs this on its own, without waiting to be asked. Sources live in
   - <Label>: prs <owner/repo>                 PRs requesting the owner's review
   - Names: <login> <Name>, <login> <Name>     to refer to people by name
 
+Where gh's GraphQL is refused (a cloud session), the sources go through REST on each repository.
+
   opening <root> <area>    memory.py's opening with the "Looked up now" and review blocks
   owe     <root> <area>    what the owner owes: people, each source of the area and the rest
 """
@@ -17,7 +19,9 @@ import json
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import memory as m  # noqa: E402
@@ -33,6 +37,10 @@ class NoGitHub(Exception):
     pass
 
 
+class Refused(NoGitHub):
+    """gh ran and was refused. A cloud session blocks GraphQL and search; REST on the repository may still answer."""
+
+
 def gh(*args):
     try:
         r = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=60)
@@ -41,7 +49,7 @@ def gh(*args):
     except subprocess.TimeoutExpired:
         raise NoGitHub("gh took too long")
     if r.returncode != 0:
-        raise NoGitHub((r.stderr.strip().splitlines() or ["gh error"])[-1][:80])
+        raise Refused((r.stderr.strip().splitlines() or ["gh error"])[-1][:80])
     return json.loads(r.stdout or "null")
 
 
@@ -75,17 +83,65 @@ def date(value):
     return dt.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(m.TZ).date()
 
 
+def rest(path, pages):
+    """A REST list, page after page, up to `pages` of 100."""
+    found = []
+    for page in range(1, pages + 1):
+        got = gh("api", f"{path}&per_page=100&page={page}")
+        found += got
+        if len(got) < 100:
+            break
+    return found
+
+
+def rest_item(it):
+    """A REST PR, issue or comment in the shape of gh's --json."""
+    return {**it, "author": it["user"], "createdAt": it["created_at"]}
+
+
+def prs_rest(repo, me):
+    """Requests to the owner and to any team, named: a team's members are out of a cloud session's reach, and
+    hiding one of the owner's reviews is worse than showing someone else's."""
+    prs = []
+    for p in rest(f"repos/{repo}/pulls?state=open", 5):
+        teams = ", ".join(t["slug"] for t in p["requested_teams"])
+        if me in [r["login"] for r in p["requested_reviewers"]]:
+            prs.append(rest_item(p))
+        elif teams:
+            prs.append({**rest_item(p), "action": f"requested team {teams}"})
+    return prs
+
+
+def issues_rest(repo, me, label_filter):
+    query = f"labels={quote(label_filter)}" if label_filter else f"assignee={quote(me)}"
+
+    def with_comments(i):
+        last_page = (i["comments"] - 1) // 100 + 1  # oldest first, so the last comment is on the last page
+        comments = gh("api", f"repos/{repo}/issues/{i['number']}/comments?per_page=100&page={last_page}") if i["comments"] else []
+        return {**rest_item(i), "comments": [rest_item(c) for c in comments]}
+
+    issues = [i for i in rest(f"repos/{repo}/issues?state=open&{query}", 2) if "pull_request" not in i]
+    with ThreadPoolExecutor(8) as pool:
+        return list(pool.map(with_comments, issues))
+
+
 def look_up(source, me):
     """The source's items, each with who spoke last, when, and whether it waits on the owner."""
     label, kind, repo, label_filter = source
     if kind == "prs":
-        prs = gh("pr", "list", "-R", repo, "--state", "open", "--search", "review-requested:@me",
-                 "--limit", "100", "--json", "number,title,author,createdAt")
-        return [{"n": p["number"], "title": p["title"], "who": p["author"]["login"], "action": "requested",
+        try:
+            prs = gh("pr", "list", "-R", repo, "--state", "open", "--search", "review-requested:@me",
+                     "--limit", "100", "--json", "number,title,author,createdAt")
+        except Refused:
+            prs = prs_rest(repo, me)
+        return [{"n": p["number"], "title": p["title"], "who": p["author"]["login"], "action": p.get("action", "requested"),
                  "when": date(p["createdAt"]), "waiting": True} for p in prs]
     filter_ = ["--label", label_filter] if label_filter else ["--assignee", "@me"]
-    issues = gh("issue", "list", "-R", repo, "--state", "open", "--limit", "200", *filter_,
-                "--json", "number,title,author,createdAt,comments")
+    try:
+        issues = gh("issue", "list", "-R", repo, "--state", "open", "--limit", "200", *filter_,
+                    "--json", "number,title,author,createdAt,comments")
+    except Refused:
+        issues = issues_rest(repo, me, label_filter)
     items = []
     for i in issues:
         last = i["comments"][-1] if i["comments"] else None
@@ -124,12 +180,23 @@ def describer(area):
     return lambda text: REF.sub(resolve, text)
 
 
+def whoami(names):
+    """The owner's login. A cloud session refuses `gh api user`; then, their own name in "Names" answers."""
+    try:
+        return gh("api", "user")["login"]
+    except Refused:
+        for login, name in names.items():
+            if m.fold(name) == m.fold(m.NAME):
+                return login
+        raise NoGitHub("no login for you: add it to Names in AREA.md")
+
+
 def everything(area):
     """[(source, items)] for every source, and the names map. Raises NoGitHub if gh fails."""
     found, names = sources(area)
     if not found:
         return [], names
-    me = gh("api", "user")["login"]
+    me = whoami(names)
     return [(s, look_up(s, me)) for s in found], names
 
 
