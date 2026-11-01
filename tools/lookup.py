@@ -11,7 +11,8 @@ The assistant runs this on its own, without waiting to be asked. Sources live in
 
 Where gh's GraphQL is refused (a cloud session), the sources go through REST on each repository.
 
-  opening <root> <area>    memory.py's opening with the "Looked up now" and review blocks
+  opening <root> <area>    memory.py's opening with what GitHub adds to it
+  overview <root> <area>   memory.py's overview with the "Looked up now" and review blocks
   owe     <root> <area>    what the owner owes: people, each source of the area and the rest
 """
 import datetime as dt
@@ -206,14 +207,12 @@ def line(it, label, names, today):
     return f"{m.short_date(it['when'], today)} · {source}#{it['n']} · {title(it['title'])} · {who} {it['action']}"
 
 
-def looked_up_blocks(area, today):
-    """What waits on the owner in the last days and every PR requesting their review, each with its title."""
-    try:
-        result, names = everything(area)
-    except NoGitHub as e:
-        return [f"🔎 **Looked up now:** couldn't check GitHub ({e})."]
+def waiting_now(area, today):
+    """(items waiting on the owner in the last days with their source, PRs requesting their review, names); None
+    with no source. Raises NoGitHub if gh fails."""
+    result, names = everything(area)
     if not result:
-        return []
+        return None
     new, reviews = [], []
     for (label, kind, _, _), items in result:
         if kind == "prs":
@@ -222,12 +221,39 @@ def looked_up_blocks(area, today):
         new += [(it, label) for it in items if it["waiting"] and (today - it["when"]).days <= DAYS_RECENT]
     new.sort(key=lambda x: x[0]["when"], reverse=True)
     reviews.sort(key=lambda it: it["when"])
-    tag = lambda it: f"#{it['n']} {title(it['title'], m.TAG_MAX)}"
-    blocks = [m.block("🔎 **Looked up now**", [line(it, label, names, today) for it, label in new],
-                      [tag(it) for it, _ in new]) if new
-              else f"🔎 **Looked up now:** nothing new waiting on you on GitHub in the last {DAYS_RECENT} days."]
+    return new, reviews, names
+
+
+def looked_up_facts(area, today):
+    """What GitHub adds to the opening: what is new for the owner, and who waits for a review, in a clause each."""
+    try:
+        found = waiting_now(area, today)
+    except NoGitHub as e:
+        return [f"GitHub: couldn't check ({e}); say so in a few words."]
+    if not found:
+        return []
+    new, reviews, names = found
+    facts = [f"New on GitHub, waiting on {m.NAME}: {line(it, label, names, today)}" for it, label in new[:OWE_ITEMS]]
     if reviews:
-        blocks.append(m.block(f"👀 **Requesting your review** ({len(reviews)})",
+        facts.append(f"Review requested on GitHub ({len(reviews)}; only if the message is short of 60 words), oldest: {line(reviews[0], '', names, today)}")
+    return facts
+
+
+def looked_up_blocks(area, today):
+    """What waits on the owner in the last days and every PR requesting their review, each with its title."""
+    try:
+        found = waiting_now(area, today)
+    except NoGitHub as e:
+        return [f"**Looked up now:** couldn't check GitHub ({e})."]
+    if not found:
+        return []
+    new, reviews, names = found
+    tag = lambda it: f"#{it['n']} {title(it['title'], m.TAG_MAX)}"
+    blocks = [m.block("**Looked up now**", [line(it, label, names, today) for it, label in new],
+                      [tag(it) for it, _ in new]) if new
+              else f"**Looked up now:** nothing new waiting on you on GitHub in the last {DAYS_RECENT} days."]
+    if reviews:
+        blocks.append(m.block(f"**Requesting your review** ({len(reviews)})",
                               [line(it, "", names, today) for it in reviews], [tag(it) for it in reviews]))
     return blocks
 
@@ -275,7 +301,7 @@ def owe(root, area):
 def main(argv):
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows consoles default to cp1252
-    if len(argv) < 4 or argv[1] not in ("opening", "owe"):
+    if len(argv) < 4 or argv[1] not in ("opening", "overview", "owe"):
         print(__doc__)
         return 2
     root = Path(argv[2]).expanduser().resolve()
@@ -287,7 +313,10 @@ def main(argv):
     if argv[1] == "owe":
         print(owe(root, area))
         return 0
-    print(m.opening(root, area, looked_up_blocks(area, m.local_today()), describer(area)))
+    if argv[1] == "overview":
+        print(m.overview(root, area, looked_up_blocks(area, m.local_today()), describer(area)))
+        return 0
+    print(m.opening(root, area, looked_up_facts(area, m.local_today()), describer(area)))
     return 0
 
 

@@ -12,7 +12,8 @@ of core/PROFILE.md (`name`, `timezone`).
   pending  <root>                        what sleep with no argument processes, and why
   state    <root> <area> [--write]       generates areas/<area>/STATE.md
   core     <root> [--write] [--ids f]    generates core/STATE.md and MAP.md
-  opening  <root> <area>                 first reply, ready, computed now
+  opening  <root> <area>                 what the first reply says and how to write it, computed now
+  overview <root> <area>                 everything open, ready to show ("what else?")
   (GitHub and other area sources: tools/lookup.py)
   brief    <root> [YYYY-MM-DD]           every area at once: overdue, due dates (to a date), follow-ups
   review   <root> <area|all>             what waits without a date or went quiet (the weekly review)
@@ -36,7 +37,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -49,7 +50,7 @@ DAYS_AHEAD = 14  # with none in DAYS_NEXT, the first one up to here; further out
 DAYS_FOLLOW_UP = 7  # waiting on others with no due date and no news for longer: time to nudge
 DAYS_WAITING = 7  # "Waiting on you" says since when, past this
 DAYS_LOG = 30  # LOG.md keeps this many days; older entries go to log/<YYYY-MM>.md
-ATTENTION_MAX = 5  # lines sleep writes for the top of the opening
+ATTENTION_MAX = 5  # lines sleep writes; the opening says the first, the overview all
 BOARD_MAX_LINES = 80
 BOARD_MAX_BYTES = 9000
 INBOX_MAX = 15
@@ -65,11 +66,13 @@ EMPTY = {"none", "nothing"}
 TEXT_MAX = 100
 TAG_MAX = 30  # an item named in the "and N more" line
 BLOCK_ITEMS = 5
-UNDATED_ITEMS = 3  # open items without a due date shown per day, in rotation
+UNDATED_ITEMS = 1  # open items without a due date brought back per day, in rotation
+NOW_ITEMS = 4  # what the opening talks about; the rest waits for "what else?"
 AGENT_SEPARATOR = "----- agent only, do not show -----"
 CALENDAR = ("Calendar: if this environment has a calendar connector (load its tools if deferred), read today's remaining "
-            "events before replying; with any, add a 🗓️ block right after the first line, `HH:MM · title`, and for "
-            "someone with open items what each side owes (memory.py person <root> <name>).")
+            "events before replying; with any, {}, and for someone with open items what each side owes "
+            "(memory.py person <root> <name>).")
+CALENDAR_BLOCK = CALENDAR.format("add a **Today** block right after the first line, `HH:MM · title`")
 PREFERENCES_MAX = 500  # words; read every session: for a rule to come in, another leaves or merges
 TOPIC_MAX = 800  # words; above it, sleep splits the topic
 CURRENCIES = ("R$", "US$", "$", "€", "£")
@@ -120,7 +123,7 @@ EVERY = re.compile(r"^(?:([1-9][0-9]{0,2})\s+)?(day|week|month|year)s?$")  # n =
 NOT_DONE = re.compile(r"^- (?:feito|feita|conclu[ií]d[oa]|pront[oa]|finished|completed)\s*:", re.I)  # the marker is "Done:"
 DROPPED = re.compile(r"^- dropped\b", re.I)
 MARKERS = r"fact|{name}|inherited|hypothesis|recommendation"
-WITH_AREA = ("validate", "state", "opening", "review", "index", "context", "fidelity", "digest", "archive", "capture")
+WITH_AREA = ("validate", "state", "opening", "overview", "review", "index", "context", "fidelity", "digest", "archive", "capture")
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z]{2,4})?")
@@ -779,7 +782,7 @@ def validate(root, area):
                     and not it["for"] and not it["pin"] and (today - it["since"]).days > DAYS_AGED):
                 warnings.append(ForSleep("aged item to move to its record", f"{label}: aged, since {it['since']}; move it, fields and all, to the linked record's ## Open"))
         if overdue:
-            warnings.append(f"BOARD.md: {overdue} item(s) overdue; the opening asks {NAME}")
+            warnings.append(f"BOARD.md: {overdue} item(s) overdue; the opening brings them up")
 
     outside = outside_schema(root, area)
     nfc = lambda text: unicodedata.normalize("NFC", text)  # file names may come decomposed
@@ -1073,14 +1076,14 @@ def in_turn(rows, today, limit=UNDATED_ITEMS):
     return [rows[i] for i in sorted((start + k) % len(rows) for k in range(limit))]
 
 
-# What waits without a date or went quiet: (key, icon, title, words in the opening's "Also" line or None)
-REVIEW = (("questions", "❓", "Questions for you", ("question for you", "questions for you")),
-          ("parked", "🧊", "Parked (left the board after 14 days)", ("parked", "parked")),
-          ("decide", "🔍", "Decisions to review (did it work?)", ("decision to review", "decisions to review")),
-          ("confirm", "✅", "Decisions to confirm", ("decision to confirm", "decisions to confirm")),
-          ("unchecked", "🧭", f"Initiatives not checked in {DAYS_STALE} days", ("initiative not checked", "initiatives not checked")),
-          ("quiet", "🔁", "Waiting on others, no news", None),
-          ("undated", "📝", "Your to-dos without a date", None))
+# What waits without a date or went quiet: (key, title, words in the overview's "Also" line or None)
+REVIEW = (("questions", "Questions for you", ("question for you", "questions for you")),
+          ("parked", "Parked (left the board after 14 days)", ("parked", "parked")),
+          ("decide", "Decisions to review (did it work?)", ("decision to review", "decisions to review")),
+          ("confirm", "Decisions to confirm", ("decision to confirm", "decisions to confirm")),
+          ("unchecked", f"Initiatives not checked in {DAYS_STALE} days", ("initiative not checked", "initiatives not checked")),
+          ("quiet", "Waiting on others, no news", None),
+          ("undated", "Your to-dos without a date", None))
 PARKED = re.compile(r"\| since (\d{4}-\d{2}-\d{2})|\bsince (\d{4}-\d{2}-\d{2})")
 LAST_CONTACT = re.compile(r"^- Last contact:\s*(\d{4}-\d{2}-\d{2}),?\s*(.*)")
 RECORD_REF = re.compile(r"\(parked in the ## \w+ of (\S+)\)|\((?:decision|initiative) (\S+)\)")
@@ -1128,8 +1131,8 @@ def review_items(area, today):
 
 
 def also(review):
-    """The opening's "Also" line: how many of each kind wait without a date (the weekly review lists them)."""
-    return "; ".join(f"{len(review[k])} {forms[len(review[k]) > 1]}" for k, _, _, forms in REVIEW if forms and review[k])
+    """The overview's "Also" line: how many of each kind wait without a date (the weekly review lists them)."""
+    return "; ".join(f"{len(review[k])} {forms[len(review[k]) > 1]}" for k, _, forms in REVIEW if forms and review[k])
 
 
 def topic(text):
@@ -1176,14 +1179,8 @@ def pending(root):
     return 0
 
 
-def opening(root, area, extra=(), describe=str):
-    """The assistant's first reply, ready to show, computed now (local mode), pending captures included.
-
-    `extra`: ready blocks from other sources (lookup.py), placed after the follow-ups.
-    `describe`: completes an item's text (lookup.py gives each "#123" its title)."""
-    today = local_today()
-    items = open_items(area)
-    n = Numbered()
+def in_view(items, today):
+    """(overdue, next due dates, coming up as asked, pinned, follow-ups): what has a reason to be brought up now."""
     dated = sorted((it for it in items if it["due"]), key=lambda it: it["due"])
     overdue = [it for it in dated if it["due"] < today and it["section"] != OTHERS]
     upcoming = [it for it in dated if it["due"] >= today]
@@ -1192,39 +1189,141 @@ def opening(root, area, extra=(), describe=str):
     week = week or [it for it in upcoming[:1] if (it["due"] - today).days <= DAYS_AHEAD and it not in ahead]
     pinned = [it for it in items if it["pin"] and it not in overdue + week + ahead]
     follow = [it for it in follow_ups(items, today) if it not in pinned]
+    return overdue, week, ahead, pinned, follow
+
+
+def heads_up(root, area):
+    """What is wrong with the setup itself: protections off, sleep pending, a newer memory."""
+    reasons = sleep_reasons(root, area, inbox_min=INBOX_MAX + 1)
+    notes = []
+    repo = Path(__file__).resolve().parent.parent  # hooks only where someone set them; no repository in chat
+    cwd = Path.cwd().resolve()
+    local = repo / ".claude" / "settings.local.json"
+    guarded = local.exists() and "guard.py" in text_of(local)
+    if ((repo / ".claude" / "settings.json").exists() or guarded) and repo not in (cwd, *cwd.parents):
+        notes.append(f"protection hooks off (session outside {str(repo).replace(str(Path.home()), '~')})")
+    elif (repo / "tools").is_dir() and not guarded and any(limits(root).values()):
+        notes.append("protections are only rules here: the guard is off (/protect turns it on)")
+    if reasons:
+        notes.append(f"worth running /sleep ({'; '.join(reasons)})")
+    st = area.file("STATE.md")
+    if st and series(st[0].get("system_version", "")) > series(VERSION):
+        notes.append(f"memory at version {st[0]['system_version']}, newer than this system ({VERSION}): "
+                     "update the repository (git pull) or reinstall the skill")
+    return notes
+
+
+def opening(root, area, extra=(), describe=str):
+    """What the assistant's first reply says, computed now (local mode), pending captures included: the facts, in the
+    order to bring them up, and how to write them. The agent writes it, so it reads as someone talking, not a screen.
+
+    `extra`: facts from other sources (lookup.py).
+    `describe`: completes an item's text (lookup.py gives each "#123" its title)."""
+    today = local_today()
+    items = open_items(area)
+    overdue, week, ahead, pinned, follow = in_view(items, today)
+    near = overdue + week + ahead + pinned
+    asked = sorted((it for it in items if it["for"] and it["section"] != OTHERS and it not in near),
+                   key=lambda it: it["since"] or dt.date.min)
+    now = (sorted(overdue, key=lambda it: (not it["for"], it["due"])) + week + ahead + asked + follow)[:NOW_ITEMS]
+    turn = [] if now or pinned else in_turn(undated(items), today)
+
+    def fact(it):
+        late = " · overdue" if it["due"] and it["due"] < today else ""
+        who = (f" · {it['for']} is waiting" if it["for"] else
+               " · theirs to deliver: a nudge at most" if it["section"] == OTHERS else "")
+        return f"- {when(it, today)}{late} · {describe(gist(it['text']))}{who}{noted(it, today)}"
+
+    out = [f"Today is {WEEKDAYS[today.weekday()]}, {MONTHS[today.month - 1]} {today.day}. Before replying, read in {root}: "
+           f"core/PROFILE.md and core/PREFERENCES.md (they override any default of yours), core/PRINCIPLES.md ({NAME}'s "
+           f"decision criteria: check them before recommending), areas/{area.name}/AREA.md (you become this assistant) "
+           "and each inbox/core capture listed below.",
+           CALENDAR.format("say the next one in a sentence"),
+           f"Then write the first reply from the facts below, in {SPEAKS}, nothing before or after: someone who works with "
+           f"{NAME} and has already looked at everything, talking to them. Plain sentences, about 60 words: no emojis, "
+           "headings, lists, numbers or counts of what stays out, and never internal notation. Keep the order and add no "
+           "item. First sentence: where you would start and why. Last sentence: one question, offering to start there."]
+    if now:
+        out += ["", "Start with:", fact(now[0])]
+    if now[1:]:
+        out += ["Then, briefly:"] + [fact(it) for it in now[1:]]
+    if pinned:
+        out += ["", f"{NAME} asked not to forget (always say these):"] + [fact(it) for it in pinned[:BLOCK_ITEMS]]
+    if turn:
+        out += ["", "Nothing presses, so bring back this one without a date (do, date or drop?):", fact(turn[0])]
+    if not (now or pinned or turn):
+        out += ["", "Nothing is open: say so in a sentence and ask what comes next."]
+    notes = attention(area, today)[0]
+    if notes:
+        out += ["", f"Also weighs, sleep's reading: {notes[0]}"]
+    late = [a for a in areas(root) if a != area.name
+            for it in open_items(Area(root, a)) if it["due"] and it["due"] < today and it["section"] != OTHERS]
+    if late:
+        out += ["", "Overdue in other areas: " + "; ".join(f"{area_title(a)}, {late.count(a)}" for a in dict.fromkeys(late))]
+    out += ["", *extra] if extra else []
+    problems = heads_up(root, area)
+    if problems:
+        out += ["", f"Heads-up, in one sentence: {'. '.join(x[:1].upper() + x[1:] for x in problems)}."]
+    total = sum(len(v) for v in review_items(area, today).values())
+    if today.weekday() == REVIEW_DAY and total:
+        out += ["", "It's Monday: the last sentence also offers the weekly review."]
+    running = threads(area)
+    core = Area(root, "core").inbox
+    shown = now + pinned[:BLOCK_ITEMS] + turn
+    out += ["", "----- context, do not recite -----"]
+    out += [f"Threads in progress: {' | '.join(short(t) for t in running)}"] if running else []
+    out += [f"\"What else?\", \"everything\": lookup.py overview <root> {area.name}, shown as it comes."]
+    out += [f"Inbox: {len(area.inbox)} capture(s) from the area and {len(core)} from core not yet consolidated "
+            "(already counted above; \"noted\" = from a pending capture)."]
+    out += [f"- inbox/{f.parent.name}/{f.name}" for f in core + area.inbox]
+    if shown:
+        out += [f"As recorded (to capture {NAME}'s answer):"] + [f"- {ref(it)}" for it in shown]
+    if total:
+        out.append(f"The weekly review: memory.py review <root> {area.name}")
+    return "\n".join(out)
+
+
+def overview(root, area, extra=(), describe=str):
+    """Everything open in the area, numbered, ready to show: what "what else?" opens.
+
+    `extra`: ready blocks from other sources (lookup.py), placed after the follow-ups.
+    `describe`: completes an item's text (lookup.py gives each "#123" its title)."""
+    today = local_today()
+    items = open_items(area)
+    n = Numbered()
+    overdue, week, ahead, pinned, follow = in_view(items, today)
     waiting = sorted((it for it in items if waits_on_owner(it)),  # first due, then who waits the longest
                      key=lambda it: (it["due"] is None, it["due"] or it["since"] or dt.date.min))
     loose = undated(items)
     running = threads(area)
     day = f"{WEEKDAYS[today.weekday()]}, {MONTHS[today.month - 1]} {today.day}"
-    head = f"**{area_title(area.name)}** · {day} · 🧵 {short(running[0]) if running else 'no thread in progress'}"
+    head = f"**{area_title(area.name)}** · {day} · thread: {short(running[0]) if running else 'none in progress'}"
     if len(running) > 1:
         head += f" · also in progress: {'; '.join(topic(t) for t in running[1:])}"
     blocks = [head]
     notes, made = attention(area, today)
     if notes:
-        blocks.append(block("🎯 **Attention**" + (f" (sleep of {short_date(made, today)})" if made else ""), notes, limit=ATTENTION_MAX))
+        blocks.append(block("**Attention**" + (f" (sleep of {short_date(made, today)})" if made else ""), notes, limit=ATTENTION_MAX))
     line = lambda it: f"{when(it, today)} · {describe(gist(it['text']))}{noted(it, today)}"
     if pinned:
-        blocks.append(n.block(f"📌 **You asked not to forget** ({len(pinned)})", [entry(it, line(it)) for it in pinned]))
+        blocks.append(n.block(f"**You asked not to forget** ({len(pinned)})", [entry(it, line(it)) for it in pinned]))
     if overdue:
-        blocks.append(n.block("🔴 **Overdue** (done, postpone or drop?)", [entry(it, line(it)) for it in overdue]))
+        blocks.append(n.block("**Overdue** (done, postpone or drop?)", [entry(it, line(it)) for it in overdue]))
     if week:
-        title = "📅 **Next due**" if len(week) == 1 else f"📅 **Next due dates** ({len(week)})"
+        title = "**Next due**" if len(week) == 1 else f"**Next due dates** ({len(week)})"
         blocks.append(n.block(title, [entry(it, line(it)) for it in week]))
     if ahead:
-        blocks.append(n.block(f"🔭 **Coming up, as you asked** ({len(ahead)})", [entry(it, line(it)) for it in ahead]))
+        blocks.append(n.block(f"**Coming up, as you asked** ({len(ahead)})", [entry(it, line(it)) for it in ahead]))
     if follow:
-        blocks.append(n.block(f"🔁 **Follow up** ({len(follow)}; nudge?)", [entry(it, line(it)) for it in follow]))
+        blocks.append(n.block(f"**Follow up** ({len(follow)}; nudge?)", [entry(it, line(it)) for it in follow]))
     blocks += list(extra)
     waiting = [it for it in waiting if it not in overdue + week + ahead + pinned]  # already numbered above
     if waiting:
         due = lambda it: f"{short_date(it['due'], today, it['approx'])} · " if it["due"] else ""
-        blocks.append(n.block(f"⏳ **Waiting on you** ({len(waiting)})", [entry(
+        blocks.append(n.block(f"**Waiting on you** ({len(waiting)})", [entry(
             it, f"{due(it)}{describe(gist(it['text']))}{waited(it, today)}{noted(it, today)}") for it in waiting]))
     if loose:
-        blocks.append(n.block(f"🕸️ **Without a date** ({len(loose)}; do, date or drop?)",
-                              [entry(it, line(it)) for it in in_turn(loose, today)]))
+        blocks.append(n.block(f"**Without a date** ({len(loose)}; do, date or drop?)", [entry(it, line(it)) for it in loose]))
     limit = today + dt.timedelta(days=DAYS_OTHER_AREAS)
     others = [p for p in due_items(root, [a for a in areas(root) if a != area.name])
               if p[0] <= limit or (p[3]["prep"] and in_sight(p[3], today))]
@@ -1244,41 +1343,21 @@ def opening(root, area, extra=(), describe=str):
         if parts:
             summary.append(f"{area_title(a)}, {' and '.join(parts)}")
     if summary:
-        blocks.append(f"🗂️ **From other areas:** {'; '.join(summary)}")
+        blocks.append(f"**From other areas:** {'; '.join(summary)}")
     review = review_items(area, today)
     if also(review):
-        blocks.append(f"➕ **Also:** {also(review)}.")
-    reasons = sleep_reasons(root, area, inbox_min=INBOX_MAX + 1)
-    notes = []
-    repo = Path(__file__).resolve().parent.parent  # hooks only where someone set them; no repository in chat
-    cwd = Path.cwd().resolve()
-    local = repo / ".claude" / "settings.local.json"
-    guarded = local.exists() and "guard.py" in text_of(local)
-    if ((repo / ".claude" / "settings.json").exists() or guarded) and repo not in (cwd, *cwd.parents):
-        notes.append(f"protection hooks off (session outside {str(repo).replace(str(Path.home()), '~')})")
-    elif (repo / "tools").is_dir() and not guarded and any(limits(root).values()):
-        notes.append("protections are only rules here: the guard is off (/protect turns it on)")
-    if reasons:
-        notes.append(f"worth running /sleep ({'; '.join(reasons)})")
-    st = area.file("STATE.md")
-    if st and series(st[0].get("system_version", "")) > series(VERSION):
-        notes.append(f"memory at version {st[0]['system_version']}, newer than this system ({VERSION}): "
-                     "update the repository (git pull) or reinstall the skill")
+        blocks.append(f"**Also:** {also(review)}.")
+    notes = heads_up(root, area)
     if notes:
-        blocks.append(f"⚠️ **Heads-up:** {'. '.join(x[:1].upper() + x[1:] for x in notes)}.")
+        blocks.append(f"**Heads-up:** {'. '.join(x[:1].upper() + x[1:] for x in notes)}.")
     total = sum(len(v) for v in review.values())
     blocks.append(f"Weekly review: {total} item(s) waiting without a date. Go through them now, or which topic?"
                   if today.weekday() == REVIEW_DAY and total else "Which topic?")
-    core = Area(root, "core").inbox
-    agent = [f"Before replying, read in {root}: core/PROFILE.md and core/PREFERENCES.md (they override any default of "
-             f"yours), core/PRINCIPLES.md ({NAME}'s decision criteria: check them before recommending), "
-             f"areas/{area.name}/AREA.md (you become this assistant) and each inbox/core capture listed below.",
-             f"Inbox: {len(area.inbox)} capture(s) from the area and {len(core)} from core not yet consolidated "
-             "(already counted above; \"noted\" = from a pending capture)."]
-    agent += [f"- inbox/{f.parent.name}/{f.name}" for f in core + area.inbox] + n.agent()
+    agent = [f"Inbox: {len(area.inbox)} capture(s) from the area and {len(Area(root, 'core').inbox)} from core not yet "
+             "consolidated (already counted above; \"noted\" = from a pending capture)."] + n.agent()
     if total:
         agent.append(f"\"Also\" and the weekly review: memory.py review <root> {area.name}")
-    return "\n\n".join(blocks) + "\n\n" + for_agent(CALENDAR, *agent)
+    return "\n\n".join(blocks) + "\n\n" + for_agent(CALENDAR_BLOCK, *agent)
 
 
 def owed(area, others=()):
@@ -1338,8 +1417,8 @@ def area_state(root, area):
             + (f" (show {it['prep']} days ahead)" if it["prep"] else "")
             for d, a, _, it in due_items(root, [area.name])] or ["  - none"]
     review = review_items(area, today)
-    out += ["", "## Review (the opening's \"Also\" line and the weekly review)", f"- Also: {also(review) or 'none'}"]
-    for key, _, title, _ in REVIEW:
+    out += ["", "## Review (the overview's \"Also\" line and the weekly review)", f"- Also: {also(review) or 'none'}"]
+    for key, title, _ in REVIEW:
         if review[key] and key not in ("questions", "quiet", "undated"):  # those are on the board below
             slug = lambda r: (lambda s: f" [[{s.group(1) or s.group(2)}]]" if s else "")(RECORD_REF.search(r))
             out += [f"- {title}:"] + [f"  - {l}{slug(r)}" for l, r, _ in review[key]]
@@ -1448,27 +1527,27 @@ def brief(root, until=None):
     blocks = [f"**All areas** · {day}"]
     tops = [f"{area_title(a)} · {notes[0]}" for a in names for notes in [attention(Area(root, a), today)[0]] if notes]
     if tops:
-        blocks.append(block("🎯 **Attention**", tops, limit=ATTENTION_MAX))
+        blocks.append(block("**Attention**", tops, limit=ATTENTION_MAX))
     if pins:
-        blocks.append(n.block(f"📌 **You asked not to forget** ({len(pins)})", [entry(it, line(a, it), a) for a, it in pins]))
+        blocks.append(n.block(f"**You asked not to forget** ({len(pins)})", [entry(it, line(a, it), a) for a, it in pins]))
     if overdue:
-        blocks.append(n.block("🔴 **Overdue** (done, postpone or drop?)", [entry(it, line(a, it), a) for a, it in overdue]))
+        blocks.append(n.block("**Overdue** (done, postpone or drop?)", [entry(it, line(a, it), a) for a, it in overdue]))
     title = f"until {short_date(end, today)}" if until else f"next {DAYS_NEXT} days"
     later = [it["due"] for _, it in dated if max(end, today) < it["due"] and (it["due"] - today).days <= DAYS_AHEAD]
     after = [(a, it) for a, it in dated if later and it["due"] == later[0] and (a, it) not in ahead]  # every item of the next due day
     if soon:
-        blocks.append(n.block(f"📅 **Due dates, {title}** ({len(soon)})", [entry(it, line(a, it), a) for a, it in soon]))
+        blocks.append(n.block(f"**Due dates, {title}** ({len(soon)})", [entry(it, line(a, it), a) for a, it in soon]))
     elif after:  # nothing in the range: the next one, so "nothing" doesn't hide tomorrow
-        blocks.append(n.block(f"📅 **Due dates, {title}:** none. **Next**", [entry(it, line(a, it), a) for a, it in after]))
+        blocks.append(n.block(f"**Due dates, {title}:** none. **Next**", [entry(it, line(a, it), a) for a, it in after]))
     else:
-        blocks.append(f"📅 **Due dates, {title}:** none.")
+        blocks.append(f"**Due dates, {title}:** none.")
     if ahead:
-        blocks.append(n.block(f"🔭 **Coming up, as you asked** ({len(ahead)})", [entry(it, line(a, it), a) for a, it in ahead]))
+        blocks.append(n.block(f"**Coming up, as you asked** ({len(ahead)})", [entry(it, line(a, it), a) for a, it in ahead]))
     if follow:
-        blocks.append(n.block(f"🔁 **Follow up** ({len(follow)}; nudge?)", [entry(it, line(a, it), a) for a, it in follow]))
+        blocks.append(n.block(f"**Follow up** ({len(follow)}; nudge?)", [entry(it, line(a, it), a) for a, it in follow]))
     cold = sorted(((a, it) for a, it in rows if it in undated([it])), key=lambda x: x[1]["since"] or dt.date.min)
     if cold:
-        blocks.append(n.block(f"🕸️ **Without a date** ({len(cold)}; do, date or drop?)",
+        blocks.append(n.block(f"**Without a date** ({len(cold)}; do, date or drop?)",
                               [entry(it, line(a, it), a) for a, it in in_turn(cold, today)]))
     waiting = []
     for a in names:
@@ -1482,17 +1561,17 @@ def brief(root, until=None):
     more = [f"{area_title(a)}: {also(review_items(Area(root, a), today))}" for a in names]
     more = [m_ for m_ in more if not m_.endswith(": ")]
     if more:
-        blocks.append(f"➕ **Also:** {'; '.join(more)}.")
+        blocks.append(f"**Also:** {'; '.join(more)}.")
     late = [f"{a}: {'; '.join(r)}" for a in names + ["core"] for r in [sleep_reasons(root, Area(root, a), INBOX_MAX + 1)] if r]
     if late:
-        blocks.append(f"⚠️ **Heads-up:** worth running /sleep ({'; '.join(late)}).")
+        blocks.append(f"**Heads-up:** worth running /sleep ({'; '.join(late)}).")
     choices = []
     for a in names:
         r = Area(root, a).file("AREA.md")
         aliases = as_list(r[0].get("aliases")) if r else []
         choices.append(a + (f" ({', '.join(aliases)})" if aliases else ""))
     blocks.append(f"Which area? {', '.join(choices)}")
-    return "\n\n".join(blocks) + "\n\n" + for_agent(CALENDAR, "Pending captures are already counted (\"noted\").", *n.agent())
+    return "\n\n".join(blocks) + "\n\n" + for_agent(CALENDAR_BLOCK, "Pending captures are already counted (\"noted\").", *n.agent())
 
 
 def review(root, names):
@@ -1504,8 +1583,8 @@ def review(root, names):
         if not any(found.values()):
             continue
         blocks.append(f"**Weekly review · {area_title(a)}** · {WEEKDAYS[today.weekday()]}, {MONTHS[today.month - 1]} {today.day}")
-        blocks += [n.block(f"{icon} **{title}** ({len(found[key])})", [(l, f"[{a}] {r}", t) for l, r, t in found[key]], limit=10)
-                   for key, icon, title, _ in REVIEW if found[key]]
+        blocks += [n.block(f"**{title}** ({len(found[key])})", [(l, f"[{a}] {r}", t) for l, r, t in found[key]], limit=10)
+                   for key, title, _ in REVIEW if found[key]]
     if not blocks:
         return f"Nothing waiting without a date in {', '.join(area_title(a) for a in names)}.\n\n{for_agent()}"
     blocks.append("Which first? (e.g. \"1 done, 2 drop, 3 Friday\")")
@@ -1556,7 +1635,7 @@ def person(root, name):
         if rows:
             blocks.append(n.block(f"**{title}** ({len(rows)})", [entry(it, line(a, it), a) for a, it in rows]))
     if running:
-        blocks.append("🧵 **In progress:** " + "; ".join(f"{area_title(a)} · {short(t)}" for a, t in running))
+        blocks.append("**In progress:** " + "; ".join(f"{area_title(a)} · {short(t)}" for a, t in running))
     if logs:
         d, a, what = max(logs)
         where = "" if a == "core" else f" · {area_title(a)}"
@@ -1920,7 +1999,7 @@ def main(argv):
             print(__doc__)
             return 2
         return new_area(root, argv[3], argv[4:])
-    if cmd in ("state", "opening", "review", "index", "context", "fidelity", "person", "digest", "archive") and len(argv) < (5 if cmd == "context" else 4):
+    if cmd in ("state", "opening", "overview", "review", "index", "context", "fidelity", "person", "digest", "archive") and len(argv) < (5 if cmd == "context" else 4):
         print(__doc__)
         return 2
     if cmd == "capture" and len(argv) < 6:
@@ -1928,7 +2007,7 @@ def main(argv):
         return 2
     if cmd in WITH_AREA and len(argv) > 3 and not argv[3].startswith("--") and not (cmd in ("validate", "review") and argv[3] == "all"):
         argv[3] = area_from_argument(root, argv[3])
-    if cmd in ("state", "opening", "review") and argv[3] == "core":
+    if cmd in ("state", "opening", "overview", "review") and argv[3] == "core":
         print(f"{cmd} is per area" + (" (or all)" if cmd == "review" else "; core/STATE.md comes from: memory.py core <root> --write"))
         return 2
     if cmd == "validate":
@@ -1977,6 +2056,9 @@ def main(argv):
         return 0
     if cmd == "opening":
         print(opening(root, Area(root, argv[3])))
+        return 0
+    if cmd == "overview":
+        print(overview(root, Area(root, argv[3])))
         return 0
     if cmd == "brief":
         until = iso_date(argv[3]) if len(argv) > 3 else None

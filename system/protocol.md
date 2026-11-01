@@ -1,6 +1,6 @@
 ---
 type: protocol
-version: 0.3.2
+version: 0.3.3
 ---
 # hippOS memory protocol
 
@@ -71,7 +71,7 @@ In "Waiting on <name>" (someone waits on <name>), "Waiting on others" (what <nam
 - `pin` (optional): <name> asked not to forget it; in every opening until closed.
 - Section with no items: `- none`.
 - `## Thread`: up to 3, one per topic, newest first: `- <topic>: <where it stopped; next step>`.
-- `## Attention`: only sleep writes it, up to 5 lines, `- <what> [recommendation YYYY-MM-DD]`; the top of the opening.
+- `## Attention`: only sleep writes it, up to 5 lines, `- <what> [recommendation YYYY-MM-DD]`; the opening says the first, the overview all.
 
 ## Lookups (AREA.md section)
 Sources the assistant checks on its own through `lookup.py` (GitHub, via `gh`), in the format of the `## Lookups` comment in `templates/area/AREA.md`. What GitHub tells is not copied into memory: it is looked up on the spot.
@@ -131,8 +131,8 @@ Check at the source: only when the environment reaches the source (git, gh, Sent
 - `confirmed: inherited`: confirm with <name> the first time the topic comes back.
 - Validity: an active initiative with `verified` over 14 days old is rechecked at the source before stating its state, or declared "not rechecked since <date>".
 - A closed to-do (done or dropped) leaves the BOARD, unless done with `every`, and becomes `- <the day>: Done: <the item>` in `LOG.md`, unless `mode: forget` removed it; a relevant outcome goes to the topic's file.
-- An overdue to-do stays on the BOARD; the opening asks "done, postpone or drop?" and <name>'s answer becomes a capture.
-- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due`, `for` or `pin` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the opening counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays. Every `## Open` line carries `| since`, or the review misses it.
+- An overdue to-do stays on the BOARD; the assistant asks "done, postpone or drop?" and <name>'s answer becomes a capture.
+- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due`, `for` or `pin` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the overview counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays. Every `## Open` line carries `| since`, or the review misses it.
 - A dated event (delivery, release, conversation) goes to `LOG.md`, newest on top; entries over 30 days old move to `log/`, never deleted.
 
 ## Common limits (each AREA.md adds its own)
