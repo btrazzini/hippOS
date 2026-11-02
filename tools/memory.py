@@ -99,7 +99,7 @@ STATUS = {
     "decision": {"proposed", "approved", "superseded", "discarded"},
 }
 PRIORITIES = {"high", "medium", "low", "tbd"}
-SECRETS = (  # (what, pattern): what the refusal names, never the value
+EXPOSURES = (  # (what, pattern): what the refusal names, never the value
     ("a private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("a key or token", re.compile(r"\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
                                   r"|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|xox[abprs]-[A-Za-z0-9-]{10,}"
@@ -179,7 +179,7 @@ def exposure(text):
     """What kind of secret the text seems to hold ("a password", "a card number"...), or None. Cards need a known
     prefix, their length and the Luhn check, a CPF its check digits, so phone numbers, amounts, IMEIs, dates and
     the test cards of payment providers stay."""
-    for what, pattern in SECRETS:
+    for what, pattern in EXPOSURES:
         if pattern.search(text):
             return what
     if any(secret_value(m.group(1)) for m in PASSWORD.finditer(text)):
