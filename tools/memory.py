@@ -37,7 +37,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
