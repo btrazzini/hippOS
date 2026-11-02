@@ -111,7 +111,7 @@ SECRETS = (  # (what, pattern): what the refusal names, never the value
 PASSWORD = re.compile(r"\b(?:password|passwd|senha|contrase[ñn]a|api[_ -]?key)\b(?:\s*[:=]\s*|(?:\s+(?:d[aoe]s?|of|for|to"
                       r"|para|del?)\s+\S+){0,2}\s+(?:é|eh|is|era|was|es)\s+)[\"'`]?([^\s\"'`]+)", re.I)
 KEPT_IN = re.compile(r"vault|cofre|1password|bitwarden|lastpass|keychain|keepass|managed|gerenciad|rotat|sha-?\d|md5|bcrypt", re.I)
-CARD = re.compile(r"(?<![\d.,/-])(?:\d[ -]?){14,15}\d(?![\d.,/-]?\d)")
+CARD = re.compile(r"(?<![\d.,/-])(?<!\d{4}[ -])(?:\d[ -]?){14,15}\d(?![\d.,/-]?\d|[ -]\d{4}\b)")  # not 16 digits of a longer key
 TEST_CARDS = {"4242424242424242", "4111111111111111", "4012888888881881", "4000056655665556", "5555555555554444",
               "5105105105105100", "2223003122003222", "5200828282828210", "378282246310005", "371449635398431",
               "6011111111111117"}  # published by payment providers for tests
@@ -182,10 +182,8 @@ def secret(text):
     for what, pattern in SECRETS:
         if pattern.search(text):
             return what
-    for m in PASSWORD.finditer(text):
-        after = text[m.end():m.end() + 40]
-        if secret_value(m.group(1)) and not KEPT_IN.search(after.split("\n")[0]):
-            return "a password"
+    if any(secret_value(m.group(1)) for m in PASSWORD.finditer(text)):
+        return "a password"
     for m in CARD.finditer(text):
         digits = re.sub(r"\D", "", m.group(0))
         if digits not in TEST_CARDS and luhn(digits) and (re.match(r"3[47]", digits) if len(digits) == 15
@@ -2039,8 +2037,8 @@ def fidelity(root, area, names):
         meta, body = read(f)
         if meta.get("mode") == "forget":  # the opposite check: what it asked to erase must be gone, history included
             # only what can't be about something else: a date or "#123" shows up in unrelated lines
-            distinctive = [l for l in literals(body) if l.startswith(CURRENCIES + ("`", "http")) or re.search(r"/[\w.-]+#\d", l)]
-            kept = [l for l in distinctive if present(l, everywhere, re.sub(r"[^\S\n]", "", everywhere))]
+            kept = [l for l in literals(body) if re.search(r"/[\w.-]+#\d", l) and re.search(re.escape(l) + r"(?!\d)", everywhere)
+                    or l.startswith(CURRENCIES + ("`", "http")) and present(l, everywhere, re.sub(r"[^\S\n]", "", everywhere))]
             missing += len(kept)
             if kept:
                 print(f"{f.name}: asked to forget, still in the memory or a CHANGELOG: {', '.join(kept)} "
