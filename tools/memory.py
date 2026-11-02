@@ -1934,7 +1934,8 @@ def lost_items(area, captures):
 
 
 def fidelity(root, area, names):
-    """Literals, to-dos and questions of each capture missing from the curated memory of the area and of core.
+    """Literals, to-dos and questions of each capture missing from the curated memory of the area and of core; for a
+    `mode: forget` capture, its literals still found there or in a CHANGELOG.
 
     An argument that is not an inbox capture is the before-copy of a split topic: each of its lines must be in the memory.
     The before-copy of an AREA.md: each of its protections must still be in the area's AREA.md, since only the owner
@@ -1944,6 +1945,9 @@ def fidelity(root, area, names):
     files += [root / "core" / n for n in ("PREFERENCES.md", "PROFILE.md", "PRINCIPLES.md")]
     corpus = "\n".join(text_of(f) for f in files if f.exists())
     compact = re.sub(r"[^\S\n]", "", corpus)  # lines stay apart: "R$ 34." is not "R$ 34.12" with the next line
+    history = "\n".join(l for f in (area.folder / "CHANGELOG.md", root / "core" / "CHANGELOG.md") if f.exists()
+                        for l in text_of(f).split("\n") if not l.startswith("#"))  # headings carry sleep's dates
+    everywhere = corpus + "\n" + history
     missing = 0
     in_inbox = {f.name for f in area.inbox + Area(root, "core").inbox}
     before = sorted(n for n in names if Path(n).name not in in_inbox)
@@ -1972,7 +1976,14 @@ def fidelity(root, area, names):
         captures = [f for f in captures if f.name in names]
     for f in captures:
         meta, body = read(f)
-        if meta.get("mode") == "forget":
+        if meta.get("mode") == "forget":  # the opposite check: what it asked to erase must be gone, history included
+            # only what can't be about something else: a date or "#123" shows up in unrelated lines
+            distinctive = [l for l in literals(body) if l.startswith(CURRENCIES + ("`", "http")) or re.search(r"/[\w.-]+#\d", l)]
+            kept = [l for l in distinctive if present(l, everywhere, re.sub(r"[^\S\n]", "", everywhere))]
+            missing += len(kept)
+            if kept:
+                print(f"{f.name}: asked to forget, still in the memory or a CHANGELOG: {', '.join(kept)} "
+                      "(erase it, unless it is the correction itself)")
             continue
         absent = [l for l in literals(body) if not present(l, corpus, compact)]
         missing += len(absent)

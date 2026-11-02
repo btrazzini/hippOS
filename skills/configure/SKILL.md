@@ -37,7 +37,7 @@ Ask which areas of life to start with (suggest common ones, such as work, person
 Create: `python3 memory.py area "<root>" <area> [alias ...]`, then fill `AREA.md` with the answers, in their words; a section they skipped keeps the template's `...`.
 
 ## 4. Finish
-1. `python3 memory.py validate "<root>"` with zero errors (fix what it flags), then `python3 memory.py state "<root>" <area> --write` for each area and `python3 memory.py core "<root>" --write`. Connector mode: run them on the local copy, upload everything, then run `core` again with `--ids` (a JSON of the created folders' ids by path, `"hippOS/areas/<area>": "<id>"`, as sleep does) and upload `MAP.md`.
+1. `python3 memory.py validate "<root>"` with zero errors (fix what it flags), then `python3 memory.py state "<root>" <area> --write` for each area and `python3 memory.py core "<root>" --write`. Connector mode: run them on the local copy, upload everything, then run `core` again with `--ids` (a JSON of the created folders' ids by path, `"hippOS/areas/<area>": "<id>"`, as sleep does) and upload `MAP.md`. Then delete `~/.cache/hippos-configure/`: it holds a copy of the memory.
 2. Computer: skills not linked: offer to run `./install.sh` from the repository.
 3. Private copy, needed for Claude Code in the cloud: if `origin` is the public hippOS, offer to create it; on a yes, with `gh` logged in, `git remote rename origin upstream` and `gh repo create <name they choose> --private --source . --push`. Never push to the public repository.
 4. Cloud and chat: the Google Drive connector turned on in Claude, with the Google account that holds `hippOS`; for chat, the zip from `tools/package.sh`.
