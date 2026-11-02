@@ -175,7 +175,7 @@ def secret_value(value):
             and not re.fullmatch(r"[A-Za-z]+-[A-Za-z0-9-]+|[0-9]+-[A-Za-z-]+", value) and not KEPT_IN.search(value))
 
 
-def secret(text):
+def exposure(text):
     """What kind of secret the text seems to hold ("a password", "a card number"...), or None. Cards need a known
     prefix, their length and the Luhn check, a CPF its check digits, so phone numbers, amounts, IMEIs, dates and
     the test cards of payment providers stay."""
@@ -779,7 +779,7 @@ def validate(root, area):
         for ref in sorted(set(LINK.findall(text))):
             if not exists(root, area, ref):
                 errors.append(f"{label}: broken link [[{ref}]]")
-        found = secret(text)
+        found = exposure(text)
         if found:
             errors.append(f"{label}: looks like it holds {found}; remove it from memory")
 
@@ -882,7 +882,7 @@ def validate(root, area):
             errors.append(f"inbox/{f.name}: invalid mode")
         if not body.strip():
             errors.append(f"inbox/{f.name}: empty capture")
-        found = secret(body)
+        found = exposure(body)
         if found:
             errors.append(f"inbox/{f.name}: looks like it holds {found}")
         # capture outside the template (common with outside agents): sleep normalizes it when consolidating
@@ -1793,7 +1793,7 @@ def capture_problems(body):
     outside = [t for t in re.findall(r"^#+ *(.*?)\s*$", body, re.M) if t not in CAPTURE_SECTIONS]
     if outside:
         problems.append(f"sections outside the template ({'; '.join(outside)}): only {', '.join(CAPTURE_SECTIONS)}")
-    found = secret(body)
+    found = exposure(body)
     if found:
         problems.append(f"looks like it holds {found}; memory never stores one: leave it out, or say where it is kept")
     for l in section(body, "To-dos") + section(body, "Questions"):
