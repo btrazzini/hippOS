@@ -40,8 +40,8 @@ Area = folder in `areas/`. Slug = file name without `.md`, unique within the are
 ## Drive access
 - Root: the `hippOS` folder <name> owns, directly in My Drive (fixed name): `title = 'hippOS' and parentId = 'root' and owner = 'me' and mimeType = 'application/vnd.google-apps.folder'`, never a shared one or a shortcut. Several: the one holding `MAP.md` (`title = 'MAP.md' and parentId = '<id>'`). Its `MAP.md`, read with `download_file_content`, lists every folder id. None: the connector is not on the Drive account that holds the memory; tell <name> and stop.
 - Finding a file: always by title and folder, `title = '<file>.md' and parentId = '<folder id>'`. Several at once: `(title = 'A.md' and parentId = 'X') or (title = 'B.md' and parentId = 'Y')`. `MAP.md` (at the root) has every folder id; file ids change with every sleep and are never stored.
-- Listing a folder: `pageSize: 100` and follow `nextPageToken` until empty (an exact-title search needs no token). The first page may hold only some of the files; never conclude a file does not exist before exhausting the pages.
-- Reading: `read_file_content` (text may come with escaped Markdown, `\#\#`, `\_`; for sleep and any read done by a script, use `download_file_content`, which returns raw text; `MAP.md` always this way, because escaping also hits the ids). Files are plain Markdown (`text/markdown`); never convert to Google Docs.
+- Listing a folder: `pageSize: 100`, following `nextPageToken` until empty; never conclude a file is missing before that.
+- Reading: `read_file_content` escapes Markdown (`\#\#`, `\_`), ids included; `download_file_content` gives raw text, for `MAP.md`, sleep and scripts. Files are plain Markdown (`text/markdown`); never convert to Google Docs.
 - The connector creates files but cannot edit the content of a `.md`. So:
   - Capture: always a new file (`create_file`, `contentMimeType: text/markdown`, `disableConversionToGoogleType: true`, `parentId` of the inbox folder).
   - Curated record: only sleep changes it. Without local access, change = create the new file with the same title in the same folder, then trash the old one. Never leave two files with the same title.
@@ -55,7 +55,7 @@ Area = folder in `areas/`. Slug = file name without `.md`, unique within the are
 - person: `type title updated areas[]`
 - area (`AREA.md`): `type title updated aliases[]`. Aliases are short names accepted in place of the area name (e.g., `wrk`); unique across all areas; `MAP.md` lists them.
 - Dates and times always in the `timezone` of `PROFILE.md` (e.g., America/New_York).
-- capture: `type area date(YYYY-MM-DDTHH:MM[:SS]) origin{claude-chat|claude-code|codex|other} mode{normal|forget}`. `origin` is the product in use: `claude-chat` in the Claude app (desktop or phone), `claude-code` in Claude Code (terminal, app or cloud), `codex` in Codex.
+- capture: `type area date(YYYY-MM-DDTHH:MM[:SS]) origin{claude-chat|claude-code|codex|other} mode{normal|forget}`. `origin`: the product in use (Claude app: `claude-chat`; Claude Code anywhere: `claude-code`).
 - `confirmed`: `yes` = recorded with <name> in this memory (proposals included); `inherited` = came from another source, unconfirmed. Independent of `status`.
 
 Body in short bullets. Initiative: `## State`, `## Risks`, `## Open`, `## Notes`. Decision: `## Context`, `## Decision`, `## Rationale`, `## Consequences`, `## Alternatives`, `## Outcome`, `## Addenda`. Topic and person: `## Facts`, `## Open`. Empty sections are omitted.
@@ -116,11 +116,12 @@ mode: normal
 ```
 Only these sections; empty ones omitted. A to-do starts with whose it is. Every line with a marker, except in `## Thread`; without a marker, it counts as `[hypothesis]`. Cite the existing slug when there is one (`[[slug]]`); new topic without a slug: describe it, sleep decides where it goes. A resolved to-do: `- Done: <the item>`; given up: `- Dropped: <the item>`. An open question only <name> can answer, left for later ("I'll see"): `## Questions`, never only in `## Thread`, which sleep drops.
 
-Read before asserting: the state of a topic is the curated record plus the pending captures in the area inbox. A pending capture that contradicts the curated record prevails, with the caveat "not yet consolidated". The current inbox listing prevails over the "Inbox not yet consolidated" section of `STATE.md`, which is a snapshot from the last sleep.
+Read before asserting: the state of a topic is the curated record plus the pending captures in the area inbox. A pending capture that contradicts the curated record prevails, with the caveat "not yet consolidated".
+
+Source out of reach: state the record with its marker, "not rechecked since <date>".
 
 An open question ("Waiting on <name>", "Questions for <name>") never becomes a conclusion in a reply or record: only <name> closes it.
 
-Check at the source: only when the environment reaches the source (git, gh, Sentry, local repository). Environment with only the Drive connector: state it with the record's marker and say "not rechecked since <date>".
 
 ## Lifecycle (applied by sleep)
 - State rewritten in the present, never stacked. History in `CHANGELOG.md` and in Drive versions.
@@ -132,7 +133,7 @@ Check at the source: only when the environment reaches the source (git, gh, Sent
 - Validity: an active initiative with `verified` over 14 days old is rechecked at the source before stating its state, or declared "not rechecked since <date>".
 - A closed to-do (done or dropped) leaves the BOARD, unless done with `every`, and becomes `- <the day>: Done: <the item>` in `LOG.md`, unless `mode: forget` removed it; a relevant outcome goes to the topic's file.
 - An overdue to-do stays on the BOARD; the assistant asks "done, postpone or drop?" and <name>'s answer becomes a capture.
-- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due`, `for` or `pin` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the overview counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays. Every `## Open` line carries `| since`, or the review misses it.
+- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due`, `for` or `pin` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the overview counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays.
 - A dated event (delivery, release, conversation) goes to `LOG.md`, newest on top; entries over 30 days old move to `log/`, deleted only by `mode: forget`.
 
 ## Common limits (each AREA.md adds its own)
