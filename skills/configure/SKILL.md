@@ -12,7 +12,7 @@ Memory rules: `protocol.md` in this folder (read "Layers", "Root in Drive" and "
 
 ## 1. Where things stand
 Check without changing anything, then tell the person in a few lines:
-- Drive: `python3 memory.py root`. A path: local mode, the root exists. Nothing: look for Google Drive for desktop ("My Drive" under `~/Library/CloudStorage/GoogleDrive-*/` on a Mac; a drive letter or `~/My Drive` on Windows); with it, local mode, the root still to be created there (several Google accounts: ask which); without it, connector mode (search `title = 'hippOS'`, as in "Root").
+- Drive: `python3 memory.py root`. A path: local mode, the root exists. Nothing: look for Google Drive for desktop ("My Drive" under `~/Library/CloudStorage/GoogleDrive-*/` on a Mac; a drive letter or `~/My Drive` on Windows); with it, local mode, the root still to be created there (several Google accounts: ask which); without it, connector mode (search as in "Root": only a folder they own, directly in My Drive).
 - Memory: a root with `core/PROFILE.md` is an existing memory: go to step 5. Otherwise, steps 2 to 4; a root without it is an unfinished setup, and they complete what is missing.
 - Computer (local mode): are `~/.claude/skills/assistant`, `sleep` and `configure` links to this repository? And `git remote -v`: an `origin` pointing to the public `btrazzini/hippOS` means there is no private copy yet.
 
@@ -24,7 +24,7 @@ Ask, one at a time:
 4. Optional: a few lines about who they are that will hold for months (role, what they do, what matters to them).
 5. Optional: two or three preferences on how to be served (length of answers, tone, what to avoid).
 
-Create: `python3 memory.py new "<root>" "<name>" <timezone> <language>`, where `<root>` is `hippOS` directly in My Drive. Then write the answers to 4 in the body of `core/PROFILE.md` (with `[<name> date]`) and to 5 in `core/PREFERENCES.md`, under the template's sections. Connector mode: build it in `~/.cache/hippos-configure/hippOS/` and, at the end of step 4, create the same folders and files in Drive: the `hippOS` folder directly in My Drive, folders before their files (`mimeType: application/vnd.google-apps.folder`), files as in "Drive access". Before creating each one, search for it by title and parent: if it exists, keep it and don't create another (the connector can't overwrite, and two files with the same title break the memory).
+Create: `python3 memory.py new "<root>" "<name>" <timezone> <language>`, where `<root>` is `hippOS` directly in My Drive. Then write the answers to 4 in the body of `core/PROFILE.md` (with `[<name> date]`) and to 5 in `core/PREFERENCES.md`, under the template's sections. Connector mode: build it in `~/.cache/hippos-configure/hippOS/` and, at the end of step 4, create the same folders and files in Drive: the `hippOS` folder directly in My Drive, folders before their files (`mimeType: application/vnd.google-apps.folder`), files as in "Drive access". Before creating each one, search for it by title and parent (the root: as in "Root"): if it exists, keep it and don't create another (the connector can't overwrite, and two files with the same title break the memory).
 
 ## 3. Areas
 Ask which areas of life to start with (suggest common ones, such as work, personal, health, finances; one is enough). For each area, one question at a time:
