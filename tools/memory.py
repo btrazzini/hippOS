@@ -99,11 +99,23 @@ STATUS = {
     "decision": {"proposed", "approved", "superseded", "discarded"},
 }
 PRIORITIES = {"high", "medium", "low", "tbd"}
-SECRETS = re.compile(
-    r"(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-[A-Za-z0-9_-]{20,}|\bghp_[A-Za-z0-9]{20,}"
-    r"|\bAKIA[0-9A-Z]{16}\b|\bxox[bp]-[A-Za-z0-9-]{10,}|\b(?:password|senha)\s*[:=]\s*\S+)",
-    re.IGNORECASE,
+SECRETS = (  # (what, pattern): what the refusal names, never the value
+    ("a private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("a key or token", re.compile(r"\b(?:sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
+                                  r"|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|xox[abprs]-[A-Za-z0-9-]{10,}"
+                                  r"|eyJ[\w-]{10,}\.eyJ[\w-]{10,}\.[\w-]{10,})")),
+    # a placeholder (${DB_PASS}, $PASS, <password>) is not a password
+    ("a password in an address", re.compile(r"(?<![\w+.-])[a-z][a-z0-9+.-]{0,30}://[^\s/:@]+:[^\s/@$<]+@", re.I)),
 )
+# "password: hunter2", "the VPN password is Xy7#q", "a senha do wifi é casa2020": the value is checked by secret_value
+PASSWORD = re.compile(r"\b(?:password|passwd|senha|contrase[ñn]a|api[_ -]?key)\b(?:\s*[:=]\s*|(?:\s+(?:d[aoe]s?|of|for|to"
+                      r"|para|del?)\s+\S+){0,2}\s+(?:é|eh|is|era|was|es)\s+)[\"'`]?([^\s\"'`]+)", re.I)
+KEPT_IN = re.compile(r"vault|cofre|1password|bitwarden|lastpass|keychain|keepass|managed|gerenciad|rotat|sha-?\d|md5|bcrypt", re.I)
+CARD = re.compile(r"(?<![\d.,/-])(?:\d[ -]?){14,15}\d(?![\d.,/-]?\d)")
+TEST_CARDS = {"4242424242424242", "4111111111111111", "4012888888881881", "4000056655665556", "5555555555554444",
+              "5105105105105100", "2223003122003222", "5200828282828210", "378282246310005", "371449635398431",
+              "6011111111111117"}  # published by payment providers for tests
+CPF = re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b")
 LINK = re.compile(r"\[\[([^\]]+)\]\]")
 # A date in free text: ISO, dd/mm or mm/dd, or a day named in words (content is in the owner's language).
 # Not "today": "até hoje" means "so far". Not "até segunda ordem": "until further notice".
@@ -137,6 +149,52 @@ DRIVES = ("My Drive", "Meu Drive", "Mi unidad", "Mon Drive", "Meine Ablage", "Il
 
 
 # ---------- reading ----------
+
+def luhn(digits):
+    total = 0
+    for i, d in enumerate(map(int, reversed(digits))):
+        total += d if i % 2 == 0 else (d * 2 - 9 if d > 4 else d * 2)
+    return total % 10 == 0
+
+
+def cpf_valid(digits):
+    if len(set(digits)) == 1:
+        return False
+    for n in (9, 10):
+        check = sum(int(d) * (n + 1 - i) for i, d in enumerate(digits[:n])) * 10 % 11 % 10
+        if check != int(digits[n]):
+            return False
+    return True
+
+
+def secret_value(value):
+    """A password's value looks real: 4 characters or more, a digit or a symbol, and not a mention (@Diego), a
+    placeholder ($PASS, <password>), a path, a hyphenated label (90-day, SHA-256) or where it is kept (vault)."""
+    value = value.rstrip(".,;:)")
+    return (len(value) >= 4 and re.search(r"[0-9!@#%^&*_+=?~]", value) is not None and not value.startswith(("@", "$", "<", "/", "~"))
+            and not re.fullmatch(r"[A-Za-z]+-[A-Za-z0-9-]+|[0-9]+-[A-Za-z-]+", value) and not KEPT_IN.search(value))
+
+
+def secret(text):
+    """What kind of secret the text seems to hold ("a password", "a card number"...), or None. Cards need a known
+    prefix, their length and the Luhn check, a CPF its check digits, so phone numbers, amounts, IMEIs, dates and
+    the test cards of payment providers stay."""
+    for what, pattern in SECRETS:
+        if pattern.search(text):
+            return what
+    for m in PASSWORD.finditer(text):
+        after = text[m.end():m.end() + 40]
+        if secret_value(m.group(1)) and not KEPT_IN.search(after.split("\n")[0]):
+            return "a password"
+    for m in CARD.finditer(text):
+        digits = re.sub(r"\D", "", m.group(0))
+        if digits not in TEST_CARDS and luhn(digits) and (re.match(r"3[47]", digits) if len(digits) == 15
+                                                           else re.match(r"4|5[1-5]|2[2-7]|6", digits)):
+            return "a card number"
+    if any(cpf_valid(re.sub(r"\D", "", m.group(0))) for m in CPF.finditer(text)):
+        return "an ID number (CPF)"
+    return None
+
 
 def text_of(path):
     """A file's text; a BOM is dropped and bytes that aren't UTF-8 become \ufffd (the validator flags them)."""
@@ -723,8 +781,9 @@ def validate(root, area):
         for ref in sorted(set(LINK.findall(text))):
             if not exists(root, area, ref):
                 errors.append(f"{label}: broken link [[{ref}]]")
-        if SECRETS.search(text):
-            errors.append(f"{label}: looks like it holds a secret; remove it from memory")
+        found = secret(text)
+        if found:
+            errors.append(f"{label}: looks like it holds {found}; remove it from memory")
 
     prefs = area.folder / "PREFERENCES.md"
     if area.name == "core" and prefs.exists():
@@ -825,8 +884,9 @@ def validate(root, area):
             errors.append(f"inbox/{f.name}: invalid mode")
         if not body.strip():
             errors.append(f"inbox/{f.name}: empty capture")
-        if SECRETS.search(body):
-            errors.append(f"inbox/{f.name}: looks like it holds a secret")
+        found = secret(body)
+        if found:
+            errors.append(f"inbox/{f.name}: looks like it holds {found}")
         # capture outside the template (common with outside agents): sleep normalizes it when consolidating
         sections = re.findall(r"^#+ *(.*?)\s*$", body, re.M)
         outside = [t for t in sections if t not in CAPTURE_SECTIONS]
@@ -1735,8 +1795,9 @@ def capture_problems(body):
     outside = [t for t in re.findall(r"^#+ *(.*?)\s*$", body, re.M) if t not in CAPTURE_SECTIONS]
     if outside:
         problems.append(f"sections outside the template ({'; '.join(outside)}): only {', '.join(CAPTURE_SECTIONS)}")
-    if SECRETS.search(body):
-        problems.append("looks like it holds a secret; memory never stores one")
+    found = secret(body)
+    if found:
+        problems.append(f"looks like it holds {found}; memory never stores one: leave it out, or say where it is kept")
     for l in section(body, "To-dos") + section(body, "Questions"):
         it = board_item("", l)
         label = f"'{clean(l[2:])[:50]}'"
