@@ -4,20 +4,20 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.3.4)
+# hippOS sleep (v0.3.5)
 
 Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder.
-Argument: none, the normal case (sleep finds on its own what to process, step 0), or an area or `core`, to limit itself to it.
+Argument: none, the normal case (step 0 finds what to process), or an area or `core`, to limit itself to it.
 `inbox/core/` is part of every sleep, with or without an argument, in a pass of its own, the last.
 
-Sleep is the only one that writes to the curated memory. It works in two phases and never skips the second.
+Sleep works in two phases and never skips the second.
 
 ## 0. Prepare
 - Only in Claude Code or Codex, with a shell. In chat or without a shell: tell <name> and stop.
 - Lock (one sleep at a time): if `SLEEP-IN-PROGRESS.md` exists at the root with `started` less than 60 minutes ago, another sleep is running: tell <name> and stop without touching anything. Older than that: a previous sleep got stuck; warn and continue. No lock: create the file before any other step, with the frontmatter `type: lock`, `started: YYYY-MM-DDTHH:MM`, `origin` and `areas`.
-- Local mode (preferred): if `python3 memory.py root` prints a path, work directly in it (it is the Drive folder itself, synced) and use the Drive connector in no step.
-- Connector mode (cloud, no local folder): build a local copy of the whole root ("Root" in the protocol; it is small, and `core/STATE.md` reads the board of every area) in `<work>/hippOS/`, listing every folder until the pages run out and reading with `download_file_content` (raw text). Save in `<work>/ids.json` the id of every folder and file, by path (`"hippOS/areas/<area>": "<id>"`).
-- In the commands below, `<root>` is the local path or `<work>/hippOS`. `<work>` is `~/.cache/hippos-sleep/`, outside the repository and the skill (memory never stays in them); empty it at the start and delete it at the end (step 3.5): it holds a copy of the memory. In both modes, before changing anything, copy to `<work>/before/` the files the run will touch (diff base and undoing, during the run).
+- Local mode (preferred): if `python3 memory.py root` prints a path, work directly in it and use the Drive connector in no step.
+- Connector mode (cloud, no local folder): build a local copy of the whole root ("Root" in the protocol) in `<work>/hippOS/`, listing every folder until the pages run out and reading with `download_file_content` (raw text). Save in `<work>/ids.json` the id of every folder and file, by path (`"hippOS/areas/<area>": "<id>"`).
+- In the commands below, `<root>` is the local path or `<work>/hippOS`. `<work>` is `~/.cache/hippos-sleep/`, outside the repository and the skill (memory never stays in them); empty it at the start and delete it at the end (step 3.5): it holds a copy of the memory. In both modes, before changing anything, copy to `<work>/before/` the files the run will touch.
 - No argument: `python3 memory.py pending <root>` says which areas to process and why. Process one at a time, core last; nothing pending: delete the lock, tell <name> and stop.
 - `python3 memory.py validate <root> <area>`: note the errors that already existed before changing anything.
 - Fix now the list of captures for this pass (the area's, or those in `inbox/core/` in the core pass, plus each file the validator says is outside the schema). A capture arriving during sleep waits for the next one; only those on the list go to the trash at the end.
@@ -63,11 +63,11 @@ Attention, last of this phase, in every area: `python3 memory.py digest <root> <
 1. `python3 memory.py validate <root> <area>`: zero new errors. Fix and repeat. A pre-existing error is also fixed in this run, without asking <name>, without losing an item or changing the meaning of any.
 2. Content check, capture by capture. First `python3 memory.py fidelity <root> <area> <captures on the list> <copy in before/ of each split topic and of a changed `AREA.md`>`: each literal or line it flags (date, amount, PR, issue, code, link, to-do) is a loss to fix, unless it left on purpose (`mode: forget`, resolved item already in `LOG.md`). Then: is everything the capture said in the curated memory, in the right place, with the right marker? Did no `[hypothesis]` become `[fact]`? Was no approved decision rewritten? Was nothing invented beyond what the captures said?
 3. Coherence, which the validator can't see, in the records this run touched: frontmatter against body and board (e.g., an initiative's `owner` against a "Waiting on <name>" item asking who the owner will be); a decision whose body says it supersedes or amends another without the `supersedes`/`amends` field; a `next` that already happened according to another capture. Incoherence: fix it if the captures settle it; otherwise, a question for <name> on the board.
-4. Independent reviewer (full run only): if another agent is available (Codex when sleep runs in Claude, Claude when it runs in Codex), hand it the captures and the diff with the request "point out only divergences between captures and curated memory, with file and line". No other agent: a subagent with `model: sonnet` and without this session's context. Confirmed divergence: fix it.
+4. Independent reviewer (full run only): if another agent is available (the other of Claude and Codex), hand it the captures and the diff with the request "point out only divergences between captures and curated memory, with file and line". No other agent: a subagent with `model: sonnet` and without this session's context. Confirmed divergence: fix it.
 
 ## 3. Write
 1. The area's `CHANGELOG.md`, and `core/CHANGELOG.md` when the run touched core (create from the template if missing): dated entry on top with the processed captures and, per file, what changed in one line.
-2. Send to Drive only the changed files (local: already in place; connector mode: as in "Drive access", trashing the old only after the new exists; a new folder first, its id in `ids.json`). Order, so that an interrupted sleep never loses data: curated first (with `BOARD.md` and `LOG.md`), then `CHANGELOG.md`.
+2. Send to Drive only the changed files (local: already in place; connector mode: as in "Drive access", trashing the old only after the new exists; a new folder first, its id in `ids.json`). Order: curated first (with `BOARD.md` and `LOG.md`), then `CHANGELOG.md`.
 3. Only after that: trash the captures on the list fixed in step 0 (connector mode: also from `<work>/hippOS/inbox/`, which `state` reads). A capture that produced a question for <name> also goes (the question is on the board).
 4. `python3 memory.py state <root> <area> --write` generates `areas/<area>/STATE.md`, and `python3 memory.py core <root> --write` generates `core/STATE.md` and `MAP.md` (in connector mode, with `--ids <work>/ids.json`; locally, the ids come from Drive itself). In connector mode, send them to Drive. Check at the end that no folder has two files with the same title.
 5. Last, delete `SLEEP-IN-PROGRESS.md` (connector mode: trash it), then `<work>`; if sleep stops midway on an error, the same before replying.

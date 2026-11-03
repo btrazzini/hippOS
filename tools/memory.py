@@ -20,6 +20,7 @@ of core/PROFILE.md (`name`, `timezone`).
   person   <root> <name>                 everything open with someone, in every area
   index    <root> <area>                 every record by type and status
   context  <root> <area> <slug>          the record and its neighbors
+  search   <root> <area|all> <term ...>  files with every term, ignoring case, accents and plurals; each word a prefix
   fidelity <root> <area> [capture ...]   capture literals, to-dos and questions missing from the memory
   digest   <root> <area>                 the area on one screen, for sleep to write ## Attention
   archive  <root> <area>                 moves LOG.md entries over 30 days old to log/<YYYY-MM>.md
@@ -37,7 +38,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.3.4"
+VERSION = "0.3.5"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -136,7 +137,7 @@ EVERY = re.compile(r"^(?:([1-9][0-9]{0,2})\s+)?(day|week|month|year)s?$")  # n =
 NOT_DONE = re.compile(r"^- (?:feito|feita|conclu[ií]d[oa]|pront[oa]|finished|completed)\s*:", re.I)  # the marker is "Done:"
 DROPPED = re.compile(r"^- dropped\b", re.I)
 MARKERS = r"fact|{name}|inherited|hypothesis|recommendation"
-WITH_AREA = ("validate", "state", "opening", "overview", "review", "index", "context", "fidelity", "digest", "archive", "capture")
+WITH_AREA = ("validate", "state", "opening", "overview", "review", "index", "context", "search", "fidelity", "digest", "archive", "capture")
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z]{2,4})?")
@@ -1943,6 +1944,57 @@ def context(root, area, slug):
     return 0
 
 
+# ---------- search ----------
+
+def plain(text):
+    """For searching: no case or accents, hyphens and underscores as spaces (`venda-pelo-site` has "pelo site")."""
+    return re.sub(r"[-_]", " ", unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower())
+
+
+def stem(word):
+    """A word without its plural ending, so it also finds the singular and the plural (decisões, decisão, decision)."""
+    for end in ("oes", "aes", "ao", "es", "s"):
+        if word.endswith(end) and len(word) - len(end) >= 3:
+            return word[:-len(end)]
+    return word
+
+
+def search(root, names, terms):
+    """What the Drive connector's `fullText contains` finds, on disk: the files of these areas, their inboxes and core
+    holding every term, each word as a prefix; a term with spaces is a phrase. Structure doesn't count: of the
+    frontmatter only `title`, and no headings (`type: decision` and `## Decision` would match every decision).
+    STATE.md and CHANGELOG.md stay out (generated, history).
+    Pending captures first, newest on top; then each file with its matching lines."""
+    patterns = [re.compile(r"\b" + r"\s+".join(re.escape(stem(w)) for w in plain(t).split())) for t in terms if plain(t).split()]
+    if not patterns:
+        print(__doc__)
+        return 2
+    folders = [root / "inbox" / n for n in names + ["core"]]
+    files = [f for d in folders for f in sorted(d.glob("*.md"), reverse=True)]
+    for n in names:
+        files += sorted((root / "areas" / n).rglob("*.md"))
+    files += sorted((root / "core").rglob("*.md"))
+    found = 0
+    for f in dict.fromkeys(files):
+        if f.name in ("STATE.md", "CHANGELOG.md"):
+            continue
+        lines = text_of(f).split("\n")
+        end = lines.index("---", 1) if lines[0] == "---" and "---" in lines[1:] else 0
+        folded = ["" if l.startswith("#") or 0 < i <= end and not l.startswith("title:") else plain(l) for i, l in enumerate(lines)]
+        whole = " ".join(folded)
+        if not all(p.search(whole) for p in patterns):
+            continue
+        found += 1
+        print(f"== {f.relative_to(root)}")
+        hits = [i for i, l in enumerate(folded) if any(p.search(l) for p in patterns)]
+        for i in hits[:5]:
+            print(f"{i + 1}: {lines[i].strip()[:200]}")
+        if len(hits) > 5:
+            print(f"(+{len(hits) - 5} lines)")
+    print(f"{found} file(s)")
+    return 0
+
+
 # ---------- fidelity ----------
 
 def literals(text):
@@ -2095,7 +2147,7 @@ def main(argv):
     if cmd == "capture" and len(argv) < 6:
         print(__doc__)
         return 2
-    if cmd in WITH_AREA and len(argv) > 3 and not argv[3].startswith("--") and not (cmd in ("validate", "review") and argv[3] == "all"):
+    if cmd in WITH_AREA and len(argv) > 3 and not argv[3].startswith("--") and not (cmd in ("validate", "review", "search") and argv[3] == "all"):
         argv[3] = area_from_argument(root, argv[3])
     if cmd in ("state", "opening", "overview", "review") and argv[3] == "core":
         print(f"{cmd} is per area" + (" (or all)" if cmd == "review" else "; core/STATE.md comes from: memory.py core <root> --write"))
@@ -2168,6 +2220,11 @@ def main(argv):
         return 0
     if cmd == "context":
         return context(root, Area(root, argv[3]), argv[4])
+    if cmd == "search":
+        if len(argv) < 5:
+            print(__doc__)
+            return 2
+        return search(root, areas(root) if argv[3] == "all" else [argv[3]], argv[4:])
     if cmd == "fidelity":
         return fidelity(root, Area(root, argv[3]), set(argv[4:]))
     if cmd == "capture":
