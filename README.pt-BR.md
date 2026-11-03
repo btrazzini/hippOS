@@ -37,6 +37,7 @@ Modos da conversa: normal (captura), "só discutindo" (não grava nada), "esquec
 | Claude Code na nuvem (claude.ai/code, navegador ou app do celular) | Sim | **Sim: é como rodar o sono longe do computador** |
 | Codex no computador | Sim | Sim, escolhendo o modelo na mão (o Codex ignora `model` e `effort` da skill) |
 | Chat do Claude (computador ou celular) | Sim | **Não** |
+| Projeto do Claude (chat e voz) | Sim, com o `CLAUDE-PROJECT-INSTRUCTIONS.md` colado nas instruções do projeto (skills não carregam na voz) | Não |
 | Codex na nuvem | Não (sem acesso ao Drive) | Não |
 | Agentes de fora (ex.: o Dot, da OpenAI) | Sim, pelo conector do Drive, com o `EXTERNAL-AGENTS.md` colado nas instruções deles | Não |
 
@@ -60,7 +61,7 @@ Testado no Mac; no Windows, ainda não (veja "Limites conhecidos").
 2. **`/configure`**, no Claude Code aberto nessa pasta. Ele faz uma pergunta por vez e monta tudo: a pasta `hippOS/` direto em "Meu Drive" (o nome é fixo: é por ele que o assistente a acha), o seu perfil (nome, idioma, fuso horário), as primeiras áreas e os arquivos `STATE.md` e `MAP.md`, e oferece agendar o `/sleep` toda noite e um resumo de manhã. Para respostas em português, escolha `pt-BR` como idioma.
 3. **Sua cópia privada.** O `/configure` também oferece criá-la: o Claude Code na nuvem só abre repositórios da sua conta, e um fork de repositório público não pode ser privado. A sua cópia pode ter qualquer nome; o hippOS fica como `upstream`, e você atualiza com `git pull upstream main` e `git push`. Os seus ajustes (hooks no `.claude/settings.json`, skills suas) ficam só na sua cópia, em arquivos que o hippOS não tem, e nunca dão conflito.
 4. **Proteções** (opcional): o `/protect` pergunta o que o assistente de cada área nunca pode fazer (deploy, gravar num banco, derrubar um ambiente compartilhado, editar uma pasta de código) e grava isso no `AREA.md` da área. No seu computador, ele também liga o guarda, um hook em `tools/guard.py` que bloqueia esses comandos, endereços e edições nas sessões abertas nesta pasta. Fora daí, são regras que o assistente segue.
-5. **Nuvem e chat:** ligue o conector do Google Drive na sua conta do Claude, com a conta Google onde a pasta `hippOS/` está. Na nuvem, as sessões abrem a sua cópia privada; no chat, um projeto que sincroniza a sua cópia, ou a skill `assistant` instalada na sua conta com o zip de `tools/package.sh` (reinstale a cada versão). O Codex na nuvem não é suportado: o ambiente dele não tem as ferramentas do Google Drive.
+5. **Nuvem e chat:** ligue o conector do Google Drive na sua conta do Claude, com a conta Google onde a pasta `hippOS/` está. Na nuvem, as sessões abrem a sua cópia privada; no chat, um projeto com o `CLAUDE-PROJECT-INSTRUCTIONS.md` nas instruções (o que funciona também por voz), ou a skill `assistant` instalada na sua conta com o zip de `tools/package.sh` (reinstale a cada versão). O Codex na nuvem não é suportado: o ambiente dele não tem as ferramentas do Google Drive.
 
 Sem computador? Importe o hippOS como repositório privado na sua conta do GitHub, abra uma sessão em claude.ai/code nele e rode o `/configure`: ele monta a memória pelo conector do Drive.
 

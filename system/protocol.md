@@ -1,6 +1,6 @@
 ---
 type: protocol
-version: 0.3.4
+version: 0.3.5
 ---
 # hippOS memory protocol
 
@@ -41,6 +41,7 @@ Area = folder in `areas/`. Slug = file name without `.md`, unique within the are
 - Root: the `hippOS` folder <name> owns, directly in My Drive (fixed name): `title = 'hippOS' and parentId = 'root' and owner = 'me' and mimeType = 'application/vnd.google-apps.folder'`, never a shared one or a shortcut. Several: the one holding `MAP.md` (`title = 'MAP.md' and parentId = '<id>'`). Its `MAP.md`, read with `download_file_content`, lists every folder id. None: the connector is not on the Drive account that holds the memory; tell <name> and stop.
 - Finding a file: always by title and folder, `title = '<file>.md' and parentId = '<folder id>'`. Several at once: `(title = 'A.md' and parentId = 'X') or (title = 'B.md' and parentId = 'Y')`. `MAP.md` (at the root) has every folder id; file ids change with every sleep and are never stored.
 - Listing a folder: `pageSize: 100`, following `nextPageToken` until empty; never conclude a file is missing before that.
+- Searching by content: `fullText contains '<term>' and mimeType = 'text/markdown' and title != 'CHANGELOG.md' and (parentId = 'A' or …)`, one id per folder from `MAP.md` (it does not descend), `pageSize: 10`. Never without `parentId`: it finds files outside the root. Accents, plurals and prefixes match; `"…"` for a phrase. `snippetVerbosity: MAX_ALLOWED` returns each file whole; one ending in `...` was cut: read it.
 - Reading: `read_file_content` escapes Markdown (`\#\#`, `\_`), ids included; `download_file_content` gives raw text: use it for `MAP.md`, sleep and scripts. Files are plain Markdown (`text/markdown`); never convert to Google Docs.
 - The connector creates files but cannot edit the content of a `.md`. So:
   - Capture: always a new file (`create_file`, `contentMimeType: text/markdown`, `disableConversionToGoogleType: true`, `parentId` of the inbox folder).
