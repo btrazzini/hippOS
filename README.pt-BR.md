@@ -24,6 +24,7 @@ O nome vem do hipocampo (*hippocampus*), a parte do cérebro que registra o dia 
 
 - **Fale, não digite.** Registrar precisa custar nada, senão não acontece. Por isso o hippOS rende mais num chat de voz: você fala a caminho de uma reunião e a memória já está em dia. *Por quê:* a hora de registrar é a hora em que aconteceu, e raramente ela é na frente de um teclado.
 - **Guarde o que importa, não tudo.** Você pode falar de qualquer coisa: planos, dúvidas, o que preferia nem pensar. O assistente guarda o que vai ser preciso depois e deixa o resto ir. *Por quê:* uma memória que grava cada palavra vira ruído e deixa de ser lida. "Só discutindo" não grava nada; "esquece isso" apaga.
+- **Ele diz de onde veio cada coisa.** Cada linha da memória vem marcada: o que você disse, e quando; o que foi conferido, e onde; o que é só palpite. *Por quê:* uma memória que mistura as suas palavras com os palpites da IA não serve na hora de decidir, por isso um palpite nunca vira fato.
 - **A memória é sua.** Markdown simples numa pasta do seu próprio Google Drive: você lê, edita, faz backup e leva para onde quiser. Sem servidor, sem banco de dados, sem conta no hippOS.
 - **Sem ficar preso a um fornecedor.** A memória são arquivos e as regras são texto aberto, então o assistente pode mudar: Claude (chat, voz, Claude Code), Codex, ou um agente de fora que alcance o seu Drive (`EXTERNAL-AGENTS.md`). Quem vier depois continua de onde o anterior parou.
 - **Ele toma a iniciativa.** Você não deveria precisar lembrar de perguntar. A abertura diz por onde começar; o que não tem data volta, um item por dia; o que os outros te devem aparece quando fica parado.
@@ -56,7 +57,7 @@ Por voz, no app do Claude no celular, a caminho do escritório:
 ## Começar, em três passos
 
 1. **Configure uma vez.** O `/configure`, no Claude Code (no computador, ou em claude.ai/code se você não tiver um computador à mão), faz uma pergunta por vez e cria a pasta `hippOS/` no seu Google Drive, o seu perfil e as suas primeiras áreas.
-2. **Converse por voz.** Crie um projeto no Claude, cole o bloco do `CLAUDE-PROJECT-INSTRUCTIONS.md` nas instruções dele e ligue o conector do Google Drive. A partir daí, abra o projeto, diga o nome de uma área e converse. Não há comando para digitar.
+2. **Converse por voz.** No Claude, crie um projeto para o hippOS, cole o bloco no seu idioma do `CLAUDE-PROJECT-INSTRUCTIONS.md` nas instruções do projeto e ligue o conector do Google Drive, com a conta Google que guarda a `hippOS/`. As instruções passam a morar no projeto: toda conversa nele, por voz inclusive, já começa como o seu assistente, sem arquivo para anexar nem comando para digitar. Para conferir, abra uma conversa por voz no projeto e diga só o nome de uma área; se a resposta pedir um comando digitado, as instruções não carregaram.
 3. **Deixe dormir.** O `/configure` oferece agendar o `/sleep` para toda noite. O sono roda no Claude Code (no computador ou na nuvem), porque reescreve a memória e roda o validador; chat e voz são para conversar.
 
 Os passos completos estão em "Começar", mais abaixo.
