@@ -2,13 +2,72 @@
 
 *Read in English: [README.md](README.md)*
 
-Assistentes pessoais de IA com memória: um assistente por área da sua vida (trabalho, saúde, finanças, um hobby e o que vier depois), e uma memória que é sua, em Markdown simples no seu Google Drive, consolidada pelo `/sleep` do jeito que o cérebro consolida a memória durante a noite. O nome vem do hipocampo (*hippocampus*), a parte do cérebro que consolida a memória durante o sono, que é o que o `/sleep` faz. Funciona no Claude (chat, celular, Claude Code) e no Codex.
+**Fale sobre o seu dia. O hippOS guarda o que importa, e qualquer assistente continua de onde você parou.**
 
-O sistema é todo em inglês (regras, código, comandos e nomes de arquivo), e a estrutura da memória também (títulos, frontmatter, marcadores e campos do BOARD, como em `templates/`). Só o conteúdo fica no seu idioma, e o assistente responde no idioma que você escolher no seu perfil, inclusive português.
+O hippOS é uma memória para quem lidera: os compromissos que você assumiu, o que os outros te devem, as decisões que você tomou e por quê, as pessoas envolvidas. Você conversa com ele como conversaria com um braço direito de confiança, de preferência por voz. Ele anota o que fica, o sono organiza tudo durante a noite, e na manhã seguinte o seu assistente já sabe onde você parou e por onde começar.
+
+## Por que ele existe
+
+Quem lidera carrega coisa demais na cabeça: a promessa feita no corredor, o relatório que o Diego deve desde a semana passada, por que o time escolheu a opção B em março, o prazo que depende de alguém que sumiu. Lista não segura isso, porque anotar é mais uma tarefa. Assistente de chat também não: cada conversa começa do zero, e a memória que alguns guardam é do fornecedor, difícil de enxergar, e fica para trás quando você troca de ferramenta.
+
+O hippOS existe para você parar de carregar isso. Você fala, ele lembra, e quando você volta ele diz o que precisa de você.
+
+## A ideia
+
+O nome vem do hipocampo (*hippocampus*), a parte do cérebro que registra o dia e, durante o sono, consolida o que merece ficar. O hippOS funciona do mesmo jeito, em três movimentos:
+
+1. **Fale.** Por voz ou texto, você conta ao assistente de uma área (trabalho, saúde, finanças, um hobby) o que aconteceu, o que decidiu, o que prometeu, o que te preocupa. Na hora, sem interromper, ele anota o que fica: decisões e seus motivos, compromissos com dono e prazo, mudanças de estado, riscos, as suas preferências. Cada anotação é um arquivo pequeno num inbox no seu Google Drive.
+2. **Durma.** O `/sleep`, de preferência agendado para toda noite, lê o inbox e consolida tudo na memória da área: junta, corrige, fecha o que foi feito, confere com código simples que nenhuma data ou valor se perdeu e escreve um estado novo de cada área.
+3. **Retome.** A conversa seguinte abre como alguém que trabalha com você falando: por onde começaria e por quê, o que está atrasado com alguém esperando, o que você pediu para não esquecer. Qualquer assistente que leia a pasta continua dali.
+
+## No que ele acredita
+
+- **Fale, não digite.** Registrar precisa custar nada, senão não acontece. Por isso o hippOS rende mais num chat de voz: você fala a caminho de uma reunião e a memória já está em dia. *Por quê:* a hora de registrar é a hora em que aconteceu, e raramente ela é na frente de um teclado.
+- **Guarde o que importa, não tudo.** Você pode falar de qualquer coisa: planos, dúvidas, o que preferia nem pensar. O assistente guarda o que vai ser preciso depois e deixa o resto ir. *Por quê:* uma memória que grava cada palavra vira ruído e deixa de ser lida. "Só discutindo" não grava nada; "esquece isso" apaga.
+- **A memória é sua.** Markdown simples numa pasta do seu próprio Google Drive: você lê, edita, faz backup e leva para onde quiser. Sem servidor, sem banco de dados, sem conta no hippOS.
+- **Sem ficar preso a um fornecedor.** A memória são arquivos e as regras são texto aberto, então o assistente pode mudar: Claude (chat, voz, Claude Code), Codex, ou um agente de fora que alcance o seu Drive (`EXTERNAL-AGENTS.md`). Quem vier depois continua de onde o anterior parou.
+- **Ele toma a iniciativa.** Você não deveria precisar lembrar de perguntar. A abertura diz por onde começar; o que não tem data volta, um item por dia; o que os outros te devem aparece quando fica parado.
+- **Um colega crítico, não um puxa-saco.** Ele recomenda e você decide. Separa fato de hipótese, avisa quando duas coisas se atropelam e não concorda por padrão.
+- **Feito para decidir e liderar.** Toda ideia que entra passa por uma pergunta: "isso ajuda um executivo a carregar menos na cabeça?". Decisões com seus motivos, compromissos, pessoas e prazos vêm primeiro.
+- **Uma área por vez.** Cada área tem o seu assistente, missão e limites (inclusive o que ele nunca pode fazer), para o trabalho não vazar para a saúde, e vice-versa.
+- **Auditável.** As regras são Markdown simples, as ferramentas são Python simples sem dependências, e o sono mantém um registro do que mudou e por quê.
+
+## O que ele não é
+
+- **Não é um app de tarefas ou de notas.** Não há tela para manter arrumada: você fala, e a memória é arrumada para você.
+- **Não é uma transcrição.** Ele não guarda cada palavra, só os fatos, as decisões e os compromissos que saem do que você diz.
+- **Não é um agente que age por você.** Ele lembra, avisa e ajuda a pensar; mandar, decidir e fazer continuam com você.
+- **Não é um serviço.** Nada seu chega ao hippOS. Este repositório guarda só o sistema.
+
+## Uma manhã com o hippOS
+
+Por voz, no app do Claude no celular, a caminho do escritório:
+
+> **Você:** Trabalho.
+>
+> **Assistente:** Eu começaria pela proposta do Diego: você prometeu uma resposta até ontem e ele está esperando. Depois, a revisão do orçamento é na sexta e o financeiro ainda não mandou os números. E você pediu para eu não esquecer da ligação com o cliente novo. Começamos pelo Diego?
+>
+> **Você:** Sim. Vou de opção B, a mais barata, mas entregue em duas fases. Falo com ele no almoço. E me lembra de cobrar o financeiro amanhã cedo.
+>
+> **Assistente:** Duas fases faz sentido, mas a segunda cai na mesma semana da revisão do orçamento; vale já dar essa data ao Diego. Anotado: responder o Diego no almoço, e cobrar o financeiro amanhã cedo.
+
+À noite, o sono registra a decisão com o motivo, mantém a resposta ao Diego aberta até você dizer que foi feita e inclui a cobrança do financeiro. Amanhã, qualquer assistente que você abrir começa dali.
+
+## Começar, em três passos
+
+1. **Configure uma vez.** O `/configure`, no Claude Code (no computador, ou em claude.ai/code se você não tiver um computador à mão), faz uma pergunta por vez e cria a pasta `hippOS/` no seu Google Drive, o seu perfil e as suas primeiras áreas.
+2. **Converse por voz.** Crie um projeto no Claude, cole o bloco do `CLAUDE-PROJECT-INSTRUCTIONS.md` nas instruções dele e ligue o conector do Google Drive. A partir daí, abra o projeto, diga o nome de uma área e converse. Não há comando para digitar.
+3. **Deixe dormir.** O `/configure` oferece agendar o `/sleep` para toda noite. O sono roda no Claude Code (no computador ou na nuvem), porque reescreve a memória e roda o validador; chat e voz são para conversar.
+
+Os passos completos estão em "Começar", mais abaixo.
+
+## Como funciona, em detalhe
+
+Daqui para baixo, a mecânica: o que fica onde, o que roda onde e os limites conhecidos.
 
 Este repositório guarda só o **sistema**: protocolo, skills, validador e moldes. A **memória** de cada pessoa fica numa pasta `hippOS/` no Google Drive dela. Nada pessoal entra aqui.
 
-## Como funciona
+O sistema é todo em inglês (regras, código, comandos e nomes de arquivo), e a estrutura da memória também (títulos, frontmatter, marcadores e campos do BOARD, como em `templates/`). Só o conteúdo fica no seu idioma, e o assistente responde no idioma que você escolher no seu perfil, inclusive português.
 
 ```
 GitHub (sua cópia do hippOS)      Google Drive: hippOS/

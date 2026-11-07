@@ -2,11 +2,70 @@
 
 *Leia em português: [README.pt-BR.md](README.pt-BR.md)*
 
-Personal AI assistants with memory: one assistant per area of your life (work, health, finances, a hobby and whatever comes next), and a memory that is yours, in plain Markdown in your Google Drive, consolidated by `/sleep` the way the brain consolidates memory overnight. The name comes from the hippocampus, the part of the brain that consolidates memory during sleep, which is what `/sleep` does. It works in Claude (chat, phone, Claude Code) and in Codex.
+**Talk about your day. hippOS keeps what matters, and any assistant picks up where you left off.**
+
+hippOS is a memory for people who lead: the commitments you made, what others owe you, the decisions you took and why, the people involved. You talk to it the way you would to a trusted chief of staff, ideally by voice. It notes what lasts, sleep organizes it overnight, and the next morning your assistant already knows where you stopped and where to start.
+
+## Why it exists
+
+Anyone who leads carries too much in their head: the promise made in the hallway, the report Diego has owed since last week, why the team chose option B in March, the deadline that hangs on someone who has gone quiet. Lists don't hold it, because writing things down is one more task. Chat assistants don't hold it either: each conversation starts from zero, and the memory some of them keep belongs to the vendor, is hard to see and stays behind when you switch.
+
+hippOS exists so you can stop carrying it. You talk, it remembers, and when you come back it tells you what needs you.
+
+## The idea
+
+The name comes from the hippocampus, the part of the brain that records the day and, during sleep, consolidates what deserves to stay. hippOS works the same way, in three moves:
+
+1. **Talk.** By voice or text, you tell the assistant of an area (work, health, finances, a hobby) what happened, what you decided, what you promised, what worries you. On the spot, without interrupting, it notes what lasts: decisions and their reasons, commitments with an owner and a date, changes of state, risks, your preferences. Each note is a small file in an inbox in your Google Drive.
+2. **Sleep.** `/sleep`, ideally scheduled every night, reads the inbox and consolidates it into the area's memory: it merges, corrects, closes what was done, checks with plain code that no date or amount was lost, and writes a fresh state of each area.
+3. **Pick up.** The next conversation opens like someone who works with you talking: where it would start and why, what is overdue with someone waiting, what you asked it not to forget. Any assistant that reads the folder continues from there.
+
+## What it believes
+
+- **Talk, don't type.** Recording has to cost nothing, or it doesn't happen. That is why hippOS is at its best in a voice chat: you talk on the way to a meeting and the memory is up to date. *Why:* the moment to record is the moment it happened, and that is rarely in front of a keyboard.
+- **Keep what matters, not everything.** You can talk about anything: plans, doubts, what you would rather not think about. The assistant keeps what will be needed later and lets the rest go. *Why:* a memory that records every word turns into noise and stops being read. "Just discussing" records nothing; "forget that" erases it.
+- **The memory is yours.** Plain Markdown in a folder in your own Google Drive: you can read it, edit it, back it up and take it elsewhere. No server, no database, no hippOS account.
+- **No vendor lock.** The memory is files and the rules are open text, so the assistant can change: Claude (chat, voice, Claude Code), Codex, or an outside agent that reaches your Drive (`EXTERNAL-AGENTS.md`). Whoever comes next picks up where the last one stopped.
+- **It takes the initiative.** You shouldn't have to remember to ask. The opening says where to start; what has no date comes back, one item a day; what others owe you comes up when it goes quiet.
+- **A critical colleague, not a yes-man.** It recommends and you decide. It separates fact from hypothesis, says when two things collide and doesn't agree by default.
+- **Made to decide and to lead.** Every idea that comes in passes one question: "does this help an executive carry less in their head?". Decisions with their reasons, commitments, people and due dates come first.
+- **One area at a time.** Each area has its own assistant, mission and limits (including what it must never do), so work doesn't spill into health, and the other way around.
+- **Auditable.** The rules are plain Markdown, the tools are plain Python with no dependencies, and sleep keeps a changelog of what it changed and why.
+
+## What it is not
+
+- **Not a task or notes app.** There is no screen to keep tidy: you talk, and the memory is tidied for you.
+- **Not a transcript.** It doesn't keep every word, only the facts, decisions and commitments that come out of what you say.
+- **Not an agent that acts for you.** It remembers, reminds and helps you think; sending, deciding and doing stay with you.
+- **Not a service.** Nothing of yours reaches hippOS. This repository holds only the system.
+
+## A morning with hippOS
+
+By voice, in the Claude app on your phone, on the way to the office:
+
+> **You:** Work.
+>
+> **Assistant:** I'd start with Diego's proposal: you promised him an answer by yesterday and he is waiting. After that, the budget review is on Friday and finance hasn't sent the numbers yet. And you asked me not to forget the call with the new client. Shall we start with Diego?
+>
+> **You:** Yes. I'm going with option B, the cheaper one, but delivered in two phases. I'll tell him at lunch. And remind me to chase finance tomorrow morning.
+>
+> **Assistant:** Two phases makes sense, but the second one lands in the same week as the budget review; worth giving Diego that date now. Noted: answer Diego at lunch, and chase finance tomorrow morning.
+
+That night, sleep records the decision with its reason, keeps the answer to Diego open until you say it is done and adds the follow-up with finance. Tomorrow, whichever assistant you open starts from there.
+
+## Getting started, in three steps
+
+1. **Set it up once.** `/configure`, in Claude Code (on your computer, or at claude.ai/code if you have no computer at hand), asks one question at a time and creates the `hippOS/` folder in your Google Drive, your profile and your first areas.
+2. **Talk by voice.** Create a project in Claude, paste the block from `CLAUDE-PROJECT-INSTRUCTIONS.md` into its instructions and turn on the Google Drive connector. From then on, open the project, say the name of an area and talk. There is no command to type.
+3. **Let it sleep.** `/configure` offers to schedule `/sleep` every night. Sleep runs in Claude Code (on your computer or in the cloud), because it rewrites the memory and runs the validator; chat and voice are for talking.
+
+The full steps are in "Getting started", below.
+
+## How it works, in detail
+
+From here on, the mechanics: what goes where, what runs where and the known limits.
 
 This repository holds only the **system**: protocol, skills, validator and templates. Each person's **memory** lives in a `hippOS/` folder in their own Google Drive. Nothing personal goes in here.
-
-## How it works
 
 ```
 GitHub (your copy of hippOS)      Google Drive: hippOS/
