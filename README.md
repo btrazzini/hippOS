@@ -24,10 +24,10 @@ The name comes from the hippocampus, the part of the brain that records the day 
 
 - **Talk, don't type.** Recording has to cost nothing, or it doesn't happen. That is why hippOS is at its best in a voice chat: you talk on the way to a meeting and the memory is up to date. *Why:* the moment to record is the moment it happened, and that is rarely in front of a keyboard.
 - **Keep what matters, not everything.** You can talk about anything: plans, doubts, what you would rather not think about. The assistant keeps what will be needed later and lets the rest go. *Why:* a memory that records every word turns into noise and stops being read. "Just discussing" records nothing; "forget that" erases it.
-- **It says where each thing came from.** Every line in the memory is marked: what you said, and when; what was checked, and against what; what is only a guess. *Why:* a memory that mixes your words with the AI's guesses can't be trusted when you decide, so a guess is never promoted to fact.
+- **It says where each thing came from.** Every statement in the memory is marked: what you said, and when; what was checked, and against what; what is only a guess. *Why:* a memory that mixes your words with the AI's guesses can't be trusted when you decide, so a guess is never promoted to fact.
 - **The memory is yours.** Plain Markdown in a folder in your own Google Drive: you can read it, edit it, back it up and take it elsewhere. No server, no database, no hippOS account.
 - **No vendor lock.** The memory is files and the rules are open text, so the assistant can change: Claude (chat, voice, Claude Code), Codex, or an outside agent that reaches your Drive (`EXTERNAL-AGENTS.md`). Whoever comes next picks up where the last one stopped.
-- **It takes the initiative.** You shouldn't have to remember to ask. The opening says where to start; what has no date comes back, one item a day; what others owe you comes up when it goes quiet.
+- **It takes the initiative.** You shouldn't have to remember to ask. The opening says where to start; when nothing presses, something without a date comes back, a different one each day; what others owe you comes up when it goes quiet.
 - **A critical colleague, not a yes-man.** It recommends and you decide. It separates fact from hypothesis, says when two things collide and doesn't agree by default.
 - **Made to decide and to lead.** Every idea that comes in passes one question: "does this help an executive carry less in their head?". Decisions with their reasons, commitments, people and due dates come first.
 - **One area at a time.** Each area has its own assistant, mission and limits (including what it must never do), so work doesn't spill into health, and the other way around.
@@ -37,7 +37,7 @@ The name comes from the hippocampus, the part of the brain that records the day 
 
 - **Not a task or notes app.** There is no screen to keep tidy: you talk, and the memory is tidied for you.
 - **Not a transcript.** It doesn't keep every word, only the facts, decisions and commitments that come out of what you say.
-- **Not an agent that acts for you.** It remembers, reminds and helps you think; sending, deciding and doing stay with you.
+- **Not an agent that decides for you.** It remembers, reminds and recommends; the decision is yours, and what it must never do in each area you set with `/protect`.
 - **Not a service.** Nothing of yours reaches hippOS. This repository holds only the system.
 
 ## A morning with hippOS
