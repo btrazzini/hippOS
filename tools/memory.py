@@ -38,12 +38,14 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.3.6"
+VERSION = "0.3.7"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
 DAYS_STALE = 14
 DAYS_AGED = 14
+DAYS_AGED_UNASKED = 7  # a question sleep raised itself, never in the owner's words, ages sooner
+SETTLE_ITEMS = 3  # of each kind, the oldest ones the opening takes its one thing to settle from
 DAYS_STATE = 3
 DAYS_OTHER_AREAS = 3
 DAYS_NEXT = 7  # due dates in the opening
@@ -445,6 +447,11 @@ def someone_else(who):
     parts = re.sub(r"\([^)]*\)", "", who or "").split()
     return (bool(who) and not is_owner(who) and 1 <= len(parts) <= 4 and parts[0][:1].isupper()
             and all(p[:1].isupper() or p.lower() in PARTICLES for p in parts))
+
+
+def said_by_owner(text):
+    """The item carries the owner's own words (`[<name> date]`), not only what sleep inherited or supposed."""
+    return bool(re.search(r"\[" + re.escape(NAME.split()[0]) + r"\b", text))
 
 
 def capture_section(item):
@@ -857,7 +864,8 @@ def validate(root, area):
             if it["due"] and it["due"] < today and it["section"] != OTHERS:
                 overdue += 1
             if (it["section"] in AGING_SECTIONS and it["since"] and LINK.search(it["text"]) and not it["due"]
-                    and not it["for"] and not it["pin"] and (today - it["since"]).days > DAYS_AGED):
+                    and not it["for"] and not it["pin"]
+                    and (today - it["since"]).days > (DAYS_AGED if said_by_owner(it["text"]) else DAYS_AGED_UNASKED)):
                 warnings.append(ForSleep("aged item to move to its record", f"{label}: aged, since {it['since']}; move it, fields and all, to the linked record's ## Open"))
         if overdue:
             warnings.append(f"BOARD.md: {overdue} item(s) overdue; the opening brings them up")
@@ -1209,6 +1217,29 @@ def review_items(area, today):
     return out
 
 
+def to_settle(area, today, skip=()):
+    """The one thing the opening asks the owner to settle today, (how to put it, entry) or None: what waits with
+    no date brings nothing back by itself, so each day takes one, a different kind each day and, within the kind,
+    one of its SETTLE_ITEMS oldest; two openings on the same day bring the same one."""
+    review = review_items(area, today)
+    stale = [entry(it, f"{gist(it['text'])} · since {short_date(it['since'], today)}")
+             for it in undated(open_items(area))
+             if it["section"] == "Loose ends" and it["since"] and (today - it["since"]).days > DAYS_AGED]
+    shown = {ref(it) for it in skip}
+    kinds = [(how, [e for e in rows if e[1] not in shown][:SETTLE_ITEMS]) for how, rows in (
+        ("a question waiting on {name}: answer, or drop it", review["questions"]),
+        ("a to-do with no date that has not moved: do it, give it a date, or drop it", stale),
+        ("parked in a record after waiting on the board: still open, or closed?", review["parked"]),
+        ("a decision made: did it work, or does it change?", review["decide"]),
+        ("a decision never confirmed: confirm it, or drop it", review["confirm"]))]
+    kinds = [(how, rows) for how, rows in kinds if rows]
+    if not kinds:
+        return None
+    day = today.toordinal()
+    how, rows = kinds[day % len(kinds)]
+    return how.format(name=NAME), rows[day // len(kinds) % len(rows)]
+
+
 def also(review):
     """The overview's "Also" line: how many of each kind wait without a date (the weekly review lists them)."""
     return "; ".join(f"{len(review[k])} {forms[len(review[k]) > 1]}" for k, _, forms in REVIEW if forms and review[k])
@@ -1334,6 +1365,8 @@ def opening(root, area, extra=(), describe=str):
     now = (sorted(overdue, key=lambda it: (not it["for"], it["due"])) + week + ahead + asked + follow)[:NOW_ITEMS]
     turn = [] if now or pinned else in_turn(undated(items), today)
 
+    settle = to_settle(area, today, now + pinned + turn)
+
     def fact(it):
         late = " · overdue" if it["due"] and it["due"] < today else ""
         who = (f" · {it['for']} is waiting" if it["for"] else
@@ -1350,7 +1383,10 @@ def opening(root, area, extra=(), describe=str):
            "say why: link what belongs together (the same person, one thing holding another, a recorded item the "
            "source shows done, an outside item and the work in motion it belongs to), and leave the rest for when "
            "asked. Start with where you would begin and why; end with one question, offering to begin there. "
-           "Under about 90 words."]
+           f"Under about {120 if settle else 90} words.",
+           "Before writing, prepare where you would begin: a reply owed to someone, drafted in two or three sentences; "
+           "something a source within reach settles (gh, calendar, repository), looked up. Say you have it and offer "
+           "it in the closing question; show it only on a yes."]
     if now:
         out += ["", "Dates and people waiting, most pressing first:"] + [fact(it) for it in now]
     if pinned:
@@ -1379,6 +1415,11 @@ def opening(root, area, extra=(), describe=str):
     notes = attention(area, today)[0]
     if notes:
         out += ["", "Sleep's reading, what dates alone don't show:"] + [f"- {describe(x)}" for x in notes]
+    if settle:
+        out += ["", f"One thing to settle today ({settle[0]}), in a short paragraph of its own before the closing "
+                "question: what it is, what is recorded on each side and what you would do, so that one sentence from "
+                f"{NAME} settles it. Whatever the answer, it is a capture that closes, dates or drops it.",
+                f"- {describe(settle[1][0])}"]
     late = [a for a in areas(root) if a != area.name
             for it in open_items(Area(root, a)) if it["due"] and it["due"] < today and it["section"] != OTHERS]
     if late:
@@ -1400,8 +1441,9 @@ def opening(root, area, extra=(), describe=str):
     out += [f"Inbox: {len(area.inbox)} capture(s) from the area and {len(core)} from core not yet consolidated "
             "(already counted above; \"noted\" = from a pending capture)."]
     out += [f"- inbox/{f.parent.name}/{f.name}" for f in core + area.inbox]
-    if shown:
+    if shown or settle:
         out += [f"As recorded (to capture {NAME}'s answer):"] + [f"- {ref(it)}" for it in shown]
+        out += [f"- {settle[1][1]}"] if settle else []
     if total:
         out.append(f"The weekly review: memory.py review <root> {area.name}")
     return "\n".join(out)

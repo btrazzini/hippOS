@@ -1,6 +1,6 @@
 ---
 type: protocol
-version: 0.3.6
+version: 0.3.7
 ---
 # hippOS memory protocol
 
@@ -126,7 +126,7 @@ An open question ("Waiting on <name>", "Questions for <name>") never becomes a c
 
 
 ## Lifecycle (applied by sleep)
-- State rewritten in the present, never stacked. History in `CHANGELOG.md` and in Drive versions.
+- State rewritten in the present. History in `CHANGELOG.md` and in Drive versions.
 - Initiative leaving `active`: outcome in `## State`; the file stays.
 - Approved proposal: `status: approved`, `decided_by: <name>`, `## Decision` with what was approved and `[<name> date: "words"]`; what was not approved stays as `[recommendation]` in `## Addenda`.
 - An approved decision is not rewritten. Contradiction: new decision with `supersedes`; the old one gets `status: superseded` and `superseded_by`. Compatible detail: dated `## Addenda`.
@@ -135,8 +135,8 @@ An open question ("Waiting on <name>", "Questions for <name>") never becomes a c
 - Validity: an active initiative with `verified` over 14 days old is rechecked at the source before stating its state, or declared "not rechecked since <date>".
 - A closed to-do (done or dropped) leaves the BOARD, unless done with `every`, and becomes `- <the day>: Done: <the item>` in `LOG.md`, unless `mode: forget` removed it; a relevant outcome goes to the topic's file.
 - An overdue to-do stays on the BOARD; the assistant asks "done, postpone or drop?" and <name>'s answer becomes a capture.
-- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due`, `for` or `pin` and with `since` over 14 days ago moves, fields and all, from the BOARD to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the overview counts it, the weekly review lists it, only <name> closes it. Without a linked record, it stays.
-- A dated event (delivery, release, conversation) goes to `LOG.md`, newest on top; entries over 30 days old move to `log/`, deleted only by `mode: forget`.
+- Aging: an item in "Waiting on <name>" or "Questions for <name>" without `due`, `for` or `pin` and with `since` over 14 days ago (7 for sleep's own question, no `[<name> ...]`) moves, fields and all, to `## Open` of the linked record (in a decision, `## Addenda`). Still open: the overview counts it, the opening brings one a day, only <name> closes it. Without a linked record, it stays.
+- A dated event goes to `LOG.md`, newest on top; entries over 30 days old move to `log/`, deleted only by `mode: forget`.
 
 ## Common limits (each AREA.md adds its own)
 - Speak only with <name>. External action (message, issue, comment, push, calendar, email) only on request, and the request is the authorization: do it directly, without a draft or new confirmation, and say what was done, with the link.

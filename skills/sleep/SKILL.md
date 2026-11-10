@@ -4,7 +4,7 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.3.6)
+# hippOS sleep (v0.3.7)
 
 Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder, with `lookup.py`.
 Argument: none, the normal case (step 0 finds what to process), or an area or `core`, to limit itself to it.
