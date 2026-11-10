@@ -4,9 +4,9 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.3.5)
+# hippOS sleep (v0.3.6)
 
-Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder.
+Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder, with `lookup.py`.
 Argument: none, the normal case (step 0 finds what to process), or an area or `core`, to limit itself to it.
 `inbox/core/` is part of every sleep, with or without an argument, in a pass of its own, the last.
 
@@ -62,14 +62,14 @@ Attention, last of this phase, in every area: `python3 memory.py digest <root> <
 ## 2. Audit (checking phase)
 1. `python3 memory.py validate <root> <area>`: zero new errors. Fix and repeat. A pre-existing error is also fixed in this run, without asking <name>, without losing an item or changing the meaning of any.
 2. Content check, capture by capture. First `python3 memory.py fidelity <root> <area> <captures on the list> <copy in before/ of each split topic and of a changed `AREA.md`>`: each literal or line it flags (date, amount, PR, issue, code, link, to-do) is a loss to fix, unless it left on purpose (`mode: forget`, resolved item already in `LOG.md`). Then: is everything the capture said in the curated memory, in the right place, with the right marker? Did no `[hypothesis]` become `[fact]`? Was no approved decision rewritten? Was nothing invented beyond what the captures said?
-3. Coherence, which the validator can't see, in the records this run touched: frontmatter against body and board (e.g., an initiative's `owner` against a "Waiting on <name>" item asking who the owner will be); a decision whose body says it supersedes or amends another without the `supersedes`/`amends` field; a `next` that already happened according to another capture. Incoherence: fix it if the captures settle it; otherwise, a question for <name> on the board.
+3. Coherence, which the validator can't see, in the records this run touched: frontmatter against body and board (e.g., an initiative's `owner` against a "Waiting on <name>" item asking who the owner will be); a decision whose body says it supersedes or amends another without the `supersedes`/`amends` field; a `next` that already happened according to another capture. With `gh`, `python3 lookup.py recheck <root> <area>`: each line (open here, closed on GitHub) is closed with `[fact <today>: gh]` or kept, saying what is left. Incoherence: fix it if the captures settle it; otherwise, a question for <name> on the board.
 4. Independent reviewer (full run only): if another agent is available (the other of Claude and Codex), hand it the captures and the diff with the request "point out only divergences between captures and curated memory, with file and line". No other agent: a subagent with `model: sonnet` and without this session's context. Confirmed divergence: fix it.
 
 ## 3. Write
 1. The area's `CHANGELOG.md`, and `core/CHANGELOG.md` when the run touched core (create from the template if missing): dated entry on top with the processed captures and, per file, what changed in one line.
 2. Send to Drive only the changed files (local: already in place; connector mode: as in "Drive access", trashing the old only after the new exists; a new folder first, its id in `ids.json`). Order: curated first (with `BOARD.md` and `LOG.md`), then `CHANGELOG.md`.
 3. Only after that: trash the captures on the list fixed in step 0 (connector mode: also from `<work>/hippOS/inbox/`, which `state` reads). A capture that produced a question for <name> also goes (the question is on the board).
-4. `python3 memory.py state <root> <area> --write` generates `areas/<area>/STATE.md`, and `python3 memory.py core <root> --write` generates `core/STATE.md` and `MAP.md` (in connector mode, with `--ids <work>/ids.json`; locally, the ids come from Drive itself). In connector mode, send them to Drive. Check at the end that no folder has two files with the same title.
+4. `python3 memory.py state <root> <area> --write` generates `areas/<area>/STATE.md`, and `python3 memory.py core <root> --write` generates `core/STATE.md` and `MAP.md`; with `gh`, `python3 lookup.py watch <root> <area> --write`, `WATCH.md` (in connector mode, with `--ids <work>/ids.json`; locally, the ids come from Drive itself). In connector mode, send them to Drive. Check at the end that no folder has two files with the same title.
 5. Last, delete `SLEEP-IN-PROGRESS.md` (connector mode: trash it), then `<work>`; if sleep stops midway on an error, the same before replying.
 
 ## 4. Reply to <name> (up to 6 lines)

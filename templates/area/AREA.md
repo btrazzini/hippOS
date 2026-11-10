@@ -33,4 +33,4 @@ updated: YYYY-MM-DD
 - ...
 
 ## Lookups
-<!-- What the assistant checks on its own, without being asked (lookup.py). One source per line: "- <Label>: issues <owner/repo>" (assigned to <name>), "- <Label>: issues <owner/repo> label <label>", "- <Label>: prs <owner/repo>" (requesting review); and "- Names: <login> <Name>, ..." to refer to people by name (<name>'s own too: a cloud session can't ask GitHub who they are). No sources: delete the section. -->
+<!-- The area's watch points: what the assistant checks on its own, without being asked (GitHub through lookup.py). One source per line: "- <Label>: issues <owner/repo>" (assigned to <name>), "- <Label>: issues <owner/repo> label <label>", "- <Label>: prs <owner/repo>" (requesting review); and "- Names: <login> <Name>, ..." to refer to people by name (<name>'s own too: a cloud session can't ask GitHub who they are). Any other line is a watch point a connector reaches, in words: "- Tasks: Google Tasks, list Work: what is due by tomorrow", "- Mail: work inbox: unread from clients", "- Chat: Slack #support: mentions of me"; the assistant looks at it when a conversation opens. No sources: delete the section. -->
