@@ -6,6 +6,8 @@ Never touches the network. The owner's name and timezone come from the frontmatt
 of core/PROFILE.md (`name`, `timezone`).
 
   root                                   the root in Google Drive for desktop (Mac or Windows); HIPPOS_ROOT sets another
+  allow    [root]                        lets Claude Code sessions opened in this repository read and edit the root
+                                         and sleep's work folder (.claude/settings.local.json, not versioned)
   new      <root> <name> <timezone> <language>   creates a memory from templates/ (never over an existing one)
   area     <root> <area> [alias ...]     adds an area from templates/ (never over an existing one)
   validate <root> [area|core|all]        schema, links, captures, board, overdue, files outside the schema
@@ -38,7 +40,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.3.7"
+VERSION = "0.3.8"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -2208,6 +2210,33 @@ def fidelity(root, area, names):
 
 # ---------- main ----------
 
+WORK = Path.home() / ".cache" / "hippos-sleep"  # sleep's work folder (skills/sleep, "<work>")
+
+
+def allow(root):
+    """Claude Code reaches folders outside the session's own only when its settings list them: the root and sleep's
+    work folder go into the repository's .claude/settings.local.json, so skills run here without asking at every
+    file. Edit rules cover every editing tool; Write rules for the same folders would only be ignored."""
+    settings = Path(__file__).resolve().parent.parent / ".claude" / "settings.local.json"
+    current = json.loads(text_of(settings)) if settings.exists() else {}
+    perms = current.setdefault("permissions", {})
+    folders = [str(f) for f in (root, WORK)]
+    rules = [f"{verb}(/{f}/**)" for f in folders for verb in ("Read", "Edit")]
+    dirs = perms.setdefault("additionalDirectories", [])
+    allowed = perms.setdefault("allow", [])
+    stale = {f"Write(/{f}/**)" for f in folders}
+    before = (list(dirs), list(allowed))
+    dirs += [f for f in folders if f not in dirs]
+    allowed[:] = [r for r in allowed if r not in stale] + [r for r in rules if r not in allowed]
+    if (dirs, allowed) == before:
+        print(f"already allowed: {', '.join(folders)}")
+        return 0
+    settings.parent.mkdir(exist_ok=True)
+    settings.write_text(json.dumps(current, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"allowed for sessions opened in {settings.parent.parent}: {', '.join(folders)} ({settings.name}, not versioned)")
+    return 0
+
+
 def main(argv):
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Windows consoles default to cp1252
@@ -2220,6 +2249,12 @@ def main(argv):
         if len(found) > 1:
             print(f"others, older: {', '.join(map(str, found[1:]))}; HIPPOS_ROOT pins one", file=sys.stderr)
         return 0
+    if argv[1:2] == ["allow"]:
+        found = [Path(argv[2]).expanduser().resolve()] if len(argv) > 2 else find_roots()
+        if not found or not found[0].is_dir():
+            print(f"no {ROOT_NAME} folder to allow: create it first (/configure) or pass its path")
+            return 1
+        return allow(found[0])
     if len(argv) < 3:
         print(__doc__)
         return 2

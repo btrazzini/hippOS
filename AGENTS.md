@@ -10,7 +10,7 @@ This repository is the hippOS **system** (protocol, skills, validator, templates
 - `/configure` or `$configure`: follow `skills/configure/SKILL.md` (setup, new areas).
 - `/protect` or `$protect`: follow `skills/protect/SKILL.md` (what each area's assistant must never do, and the guard hook).
 - Memory rules: `system/protocol.md`.
-- Outside agent without the skills (e.g., OpenAI's Dot): `EXTERNAL-AGENTS.md` too.
+- Outside agent without the skills (e.g., OpenAI's Dot): `EXTERNAL-AGENTS.md` too; a ChatGPT project: `CHATGPT-PROJECT-INSTRUCTIONS.md`.
 
 ## If asked to change the system
 - Never write anyone's data (names of people and clients, amounts, decisions, contacts, real areas) into a file in this repo. Examples use generic placeholders (`work`, `hobby`, `Diego`). What belongs to one person (hooks in `.claude/settings.json`, their own skills) stays only in their private copy.
