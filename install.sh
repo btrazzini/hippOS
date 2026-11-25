@@ -4,7 +4,7 @@
 # Codex: links the skills into ~/.agents/skills and ~/.codex/skills.
 set -eu
 REPO="$(cd "$(dirname "$0")" && pwd)"
-chmod +x "$REPO/tools/memory.py" "$REPO/tools/lookup.py" "$REPO/tools/guard.py"
+chmod +x "$REPO/tools/memory.py" "$REPO/tools/lookup.py" "$REPO/tools/guard.py" "$REPO/tools/schedule.sh"
 for skill in assistant sleep configure protect; do
   link="$HOME/.claude/skills/$skill"
   if [ -L "$link" ] && [ "$(readlink "$link")" = "$REPO/skills/$skill" ]; then

@@ -99,6 +99,7 @@ The assistant replies in the `language` set in your profile. The system is in En
 | Claude chat (desktop or phone) | Yes | **No** |
 | Claude project (chat and voice) | Yes, with `CLAUDE-PROJECT-INSTRUCTIONS.md` pasted into the project's instructions (skills don't load in voice) | No |
 | ChatGPT project | Yes, with `CHATGPT-PROJECT-INSTRUCTIONS.md` pasted into the project's instructions and the Google Drive connector on | No |
+| Claude Duet | Yes, one channel per area, with the block from `CLAUDE-DUET-INSTRUCTIONS.md` pasted into each channel's instructions and the Google Drive connector on | No |
 | Codex in the cloud | No (no Drive access) | No |
 | Outside agents (e.g., OpenAI's Dot) | Yes, through the Drive connector, with `EXTERNAL-AGENTS.md` pasted into their instructions | No |
 
@@ -141,7 +142,7 @@ Old notes need no separate tool: what the validator flags, the next `/sleep` fix
 - **Windows is untested.** The skills rely on git symlinks (turn on Developer Mode or `git config core.symlinks true` before cloning), `install.sh` needs bash (Git Bash or WSL), the rules call `python3`, and correct timezones need the `tzdata` package (`pip install tzdata`).
 - **Folder ids outside a Mac.** Only Google Drive for desktop on a Mac exposes folder ids, so a local `/sleep` on Windows or Linux leaves them out of `MAP.md`; the assistant in chat and in the cloud relies on them. A `/sleep` run in the cloud (claude.ai/code) fills them in.
 - **Protections are enforced only on the computer.** The guard blocks what the lists name in sessions opened in the repository's folder; in chat, in the cloud and in other folders they are rules. Patterns are plain text, so a determined rewrite of a command can slip past; keep anything critical behind real permissions too.
-- **Sleep runs by itself only on a schedule.** `/configure` offers to schedule `/sleep` every night: a scheduled task in the Claude desktop app (local mode; it runs only while the app is open, or at the next launch) or a cloud routine (`/schedule`, on your private copy, through the connector, slower). Without one, you run `/sleep` yourself.
+- **Sleep runs by itself only on a schedule.** `/configure` offers to schedule `/sleep` every night. On a Mac, `tools/schedule.sh install 03:00` schedules it through launchd. It runs even with the Claude app closed (if the Mac is asleep at that hour, it runs on wake; if the Mac is off, that day is skipped) and leaves a notification with sleep's reply and a log in `~/Library/Logs/hippOS/`; `status`, `now`, `check` and `remove` do the rest. Elsewhere: a scheduled task in the Claude desktop app (local mode; it runs only while the app is open, or at the next launch) or a cloud routine (`/schedule`, on your private copy, through the connector, slower). Without one, you run `/sleep` yourself.
 
 ## Credits and inspiration
 

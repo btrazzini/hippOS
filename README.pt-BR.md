@@ -99,6 +99,7 @@ Modos da conversa: normal (captura), "só discutindo" (não grava nada), "esquec
 | Chat do Claude (computador ou celular) | Sim | **Não** |
 | Projeto do Claude (chat e voz) | Sim, com o `CLAUDE-PROJECT-INSTRUCTIONS.md` colado nas instruções do projeto (skills não carregam na voz) | Não |
 | Projeto do ChatGPT | Sim, com o `CHATGPT-PROJECT-INSTRUCTIONS.md` colado nas instruções do projeto e o conector do Google Drive ligado | Não |
+| Claude Duet | Sim, um canal por área, com o bloco do `CLAUDE-DUET-INSTRUCTIONS.md` colado nas instruções de cada canal e o conector do Google Drive ligado | Não |
 | Codex na nuvem | Não (sem acesso ao Drive) | Não |
 | Agentes de fora (ex.: o Dot, da OpenAI) | Sim, pelo conector do Drive, com o `EXTERNAL-AGENTS.md` colado nas instruções deles | Não |
 
@@ -141,7 +142,7 @@ Notas antigas não precisam de ferramenta à parte: o que o validador aponta, o 
 - **Windows não foi testado.** As skills usam links simbólicos do git (ligue o Modo de Desenvolvedor ou rode `git config core.symlinks true` antes de clonar), o `install.sh` precisa de bash (Git Bash ou WSL), as regras chamam `python3` e, para o fuso horário sair certo, é preciso o pacote `tzdata` (`pip install tzdata`).
 - **Ids das pastas fora do Mac.** Só o Google Drive para desktop no Mac expõe os ids das pastas, então um `/sleep` local no Windows ou no Linux os deixa fora do `MAP.md`; o assistente no chat e na nuvem depende deles. Um `/sleep` rodado na nuvem (claude.ai/code) os preenche.
 - **As proteções só são garantidas no computador.** O guarda bloqueia o que as listas citam nas sessões abertas na pasta do repositório; no chat, na nuvem e em outras pastas, são regras. Os padrões são texto simples, então um comando reescrito de propósito pode escapar; mantenha o que for crítico também atrás de permissões de verdade.
-- **O sono só roda sozinho se estiver agendado.** O `/configure` oferece agendar o `/sleep` toda noite: uma tarefa agendada no app do Claude no computador (modo local; só roda com o app aberto, ou na próxima vez que ele abrir) ou uma rotina na nuvem (`/schedule`, na sua cópia privada, pelo conector, mais devagar). Sem isso, você mesmo roda o `/sleep`.
+- **O sono só roda sozinho se estiver agendado.** O `/configure` oferece agendar o `/sleep` toda noite. No Mac, `tools/schedule.sh install 03:00` agenda pelo launchd. Ele roda mesmo com o app do Claude fechado (se o Mac estiver dormindo nessa hora, roda quando acordar; se estiver desligado, aquele dia fica sem sono) e deixa uma notificação com a resposta do sono e um log em `~/Library/Logs/hippOS/`; `status`, `now`, `check` e `remove` fazem o resto. Fora do Mac: uma tarefa agendada no app do Claude no computador (modo local; só roda com o app aberto, ou na próxima vez que ele abrir) ou uma rotina na nuvem (`/schedule`, na sua cópia privada, pelo conector, mais devagar). Sem isso, você mesmo roda o `/sleep`.
 
 ## Créditos e inspiração
 
