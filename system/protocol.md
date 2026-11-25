@@ -1,6 +1,6 @@
 ---
 type: protocol
-version: 0.3.9
+version: 0.3.10
 ---
 # hippOS memory protocol
 
