@@ -1,6 +1,6 @@
 ---
 type: protocol
-version: 0.3.11
+version: 0.4.0
 ---
 # hippOS memory protocol
 
@@ -35,6 +35,7 @@ hippOS/
     topics/<slug>.md
     drafts/<slug>.md       texts in progress; not a source of state
   inbox/<area>/            raw captures; `inbox/core/` for what applies to every area
+  archive/<area>/<YYYY-MM>/  consolidated captures (raw layer): never loaded; reread to check a record against what was said
 ```
 Area = folder in `areas/`. Slug = file name without `.md`, unique within the area. Reference in the body with `[[slug]]`; in frontmatter, lists without double brackets. Reference to another area (or core): `[[area:slug]]`.
 
@@ -47,11 +48,11 @@ Area = folder in `areas/`. Slug = file name without `.md`, unique within the are
 - The connector creates files but cannot edit the content of a `.md`. So:
   - Capture: always a new file (`create_file`, `contentMimeType: text/markdown`, `disableConversionToGoogleType: true`, `parentId` of the inbox folder).
   - Curated record: only sleep changes it. Without local access, change = create the new file with the same title in the same folder, then trash the old one. Never leave two files with the same title.
-- Local mode (preferred when available): with a shell, `python3 memory.py root` prints the root synced by Google Drive for desktop (Mac or Windows). If it prints one, read, search (`rg`), capture (`memory.py capture <root> <area> <origin> <topic>`, the body on stdin: it names the file, stamps the time and refuses malformed fields) and, during sleep, edit directly there; Drive syncs by itself. The ids, `MAP.md` and the search rules above apply only to connector mode.
+- Local mode (preferred when available): if `python3 memory.py root` prints the root synced by Google Drive for desktop, read, search (`rg`), capture (`memory.py capture <root> <area> <origin> <topic>`, the body on stdin: it names, stamps, validates and joins the capture of the same stretch) and, during sleep, edit directly there; Drive syncs by itself. The ids, `MAP.md` and the search rules above apply only to connector mode.
 
 ## Frontmatter schema
 - initiative: `type title status{active|paused|done|cancelled} priority{high|medium|low|tbd} owner verified(YYYY-MM-DD) next(1 line) depends_on[] unblocks[] decisions[] refs[]`
-- decision: `type title status{proposed|approved|superseded|discarded} date decided_by confirmed{yes|inherited} supersedes superseded_by amends[] affects[] review_on(YYYY-MM-DD, optional)`
+- decision: `type title status{proposed|approved|superseded|discarded} date decided_by confirmed{yes|inherited} supersedes superseded_by amends[] affects[] review_on(YYYY-MM-DD|none)`
 - `amends`: older decisions this one changes only in part (the older one stays approved; it gets in `## Addenda` the line "amended by [[slug]]: <what>"). `supersedes`: the older one stops applying entirely.
 - topic: `type title updated links[]`
 - person: `type title updated areas[]`
@@ -87,7 +88,7 @@ The area's watch points, looked at unasked, in the format of the `## Lookups` co
 - "forget that" or "that was wrong": capture with `mode: forget` saying what; sleep erases it from the memory, logs and changelogs included.
 
 ## Capture (every assistant session)
-What to capture: decision and rationale, change of state, priority, to-do with owner and due date, risk, commitment, new domain fact, <name>'s preference on how to be served, correction made by <name>, outcome of an old decision. Do not capture: conversation without durable content, what git, gh and repositories already tell (point to them), analysis <name> did not adopt.
+What to capture: decision and rationale, change of state, priority, to-do with owner and due date, risk, commitment, new domain fact, <name>'s preference on how to be served, correction made by <name>, outcome of an old decision. Do not capture: conversation without durable content, analysis <name> did not adopt, what a source tells again ("Lifecycle").
 
 When: right after the fact, without waiting for the end; context may run out. Group in one capture what came up in the same stretch of conversation. Every capture ends with `## Thread`, the topic in progress (format in "Board items"): a session may end without warning.
 
@@ -126,11 +127,11 @@ An open question ("Waiting on <name>", "Questions for <name>") never becomes a c
 
 
 ## Lifecycle (applied by sleep)
-- State rewritten in the present. History in `CHANGELOG.md` and in Drive versions.
+- State rewritten in the present. History in `CHANGELOG.md`, `archive/` and Drive versions. What a source tells again (git, gh, a repository: counts, file lists, a PR's state) is neither captured nor kept as state: a pointer to it, with the day of the look.
 - Initiative leaving `active`: outcome in `## State`; the file stays.
 - Approved proposal: `status: approved`, `decided_by: <name>`, `## Decision` with what was approved and `[<name> date: "words"]`; what was not approved stays as `[recommendation]` in `## Addenda`.
 - An approved decision is not rewritten. Contradiction: new decision with `supersedes`; the old one gets `status: superseded` and `superseded_by`. Compatible detail: dated `## Addenda`.
-- A decision with an observable effect gets `review_on`; at review, `## Outcome` with what happened. An outcome revealing a criterion of <name> becomes a line in `core/PRINCIPLES.md`.
+- An approved decision gets `review_on`: the day its effect can be seen, or `none` (a rule, a name); at review, `## Outcome` with what happened. An outcome revealing a criterion of <name> becomes a line in `core/PRINCIPLES.md`.
 - `confirmed: inherited`: confirm with <name> the first time the topic comes back.
 - Validity: an active initiative with `verified` over 14 days old is rechecked at the source before stating its state, or declared "not rechecked since <date>".
 - A closed to-do (done or dropped) leaves the BOARD, unless done with `every`, and becomes `- <the day>: Done: <the item>` in `LOG.md`, unless `mode: forget` removed it; a relevant outcome goes to the topic's file.

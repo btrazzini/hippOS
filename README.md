@@ -73,10 +73,13 @@ GitHub (your copy of hippOS)      Google Drive: hippOS/
   system/protocol.md                core/         who you are, preferences, principles, overview
   skills/assistant/  ──reads────▶   areas/<area>  curated memory of each area
                      ──writes───▶   inbox/<area>  raw captures from each conversation
-  skills/sleep/      ──reads the inbox, writes areas/ and core/, empties the inbox
-  tools/memory.py    validator, STATE, opening, fidelity (no network)
+  skills/sleep/      ──reads the inbox, writes areas/ and core/,   archive/<area>  captures already consolidated
+                       moves the inbox to archive/
+  tools/memory.py    validator, STATE, opening, fidelity, health (no network)
   tools/lookup.py    the area's watch points: GitHub, through gh, on the spot
 ```
+
+The architecture, layer by layer, and the research behind it: [`system/architecture.md`](system/architecture.md).
 
 Setup is guided: **`/configure`** asks one question at a time and builds the memory (see "Getting started").
 

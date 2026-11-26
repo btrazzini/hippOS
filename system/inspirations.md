@@ -24,3 +24,17 @@ What doesn't fit here:
 - Rewriting groups of pages by a model: sleep already consolidates, and the project itself keeps this off until it passes a retrieval test.
 
 Common origin: Andrej Karpathy's "LLM wiki" pattern (ingest, query and lint, with an index and a log), which ai-memory itself cites.
+
+## Anthropic's research on agent memory and dreaming
+
+- Sources: "The components of agent memory" (2026-11-06), the "Dreaming with a dynamic workflow" cookbook (2026-11-02), and the Claude docs on dreams, memory stores, the memory tool and Claude Code memory (read on 2026-11-26).
+- What it is: experiments and a reference pipeline for agents that keep notes across sessions and consolidate them offline ("dreaming") against the raw transcripts.
+
+Ideas we brought in (0.4.0), detailed in `architecture.md`:
+- The raw layer is kept: consolidated captures go to `archive/` instead of the trash, so a later sleep or reviewer can check a note against what was said.
+- Store only what the environment won't show again; copied state goes stale silently.
+- Records stay small, joined by links, with the limit checked by code for initiatives too.
+- One capture per stretch of conversation, joined by code.
+- Health measured by layer (`memory.py health`).
+
+What doesn't fit here: hosted memory stores and the Dreams API (the memory would leave the person's Drive), model-written insights promoted without the person's approval, parallel analyzers per transcript.

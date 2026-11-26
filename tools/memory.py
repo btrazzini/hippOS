@@ -22,11 +22,15 @@ of core/PROFILE.md (`name`, `timezone`).
   person   <root> <name>                 everything open with someone, in every area
   index    <root> <area>                 every record by type and status
   context  <root> <area> <slug>          the record and its neighbors
-  search   <root> <area|all> <term ...>  files with every term, ignoring case, accents and plurals; each word a prefix
+  search   <root> <area|all> <term ...> [--raw]  files with every term, ignoring case, accents and plurals; each word a
+                                         prefix; --raw adds the archived captures
   fidelity <root> <area> [capture ...]   capture literals, to-dos and questions missing from the memory
   digest   <root> <area>                 the area on one screen, for sleep to write ## Attention
   archive  <root> <area>                 moves LOG.md entries over 30 days old to log/<YYYY-MM>.md
-  capture  <root> <area> <origin> <topic> [--forget]   writes a capture from stdin; refuses malformed fields
+  keep     <root> <area> <capture ...>   sleep's last step: consolidated captures to archive/<area>/<YYYY-MM>/ (raw layer)
+  health   <root> [area|all]             growth by layer and signs of decay (records over the limit, decisions without review)
+  capture  <root> <area> <origin> <topic> [--forget]   writes a capture from stdin; refuses malformed fields; joins
+                                         the capture of the same stretch (same origin and mode, under 20 minutes)
 """
 import calendar
 import datetime as dt
@@ -40,7 +44,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.3.11"
+VERSION = "0.4.0"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -89,7 +93,10 @@ CALENDAR = ("Calendar: if this environment has a calendar connector (load its to
             "(memory.py person <root> <name>).")
 CALENDAR_BLOCK = CALENDAR.format("add a **Today** block right after the first line, `HH:MM · title`")
 PREFERENCES_MAX = 500  # words; read every session: for a rule to come in, another leaves or merges
-TOPIC_MAX = 800  # words; above it, sleep splits the topic
+RECORD_MAX = 800  # words of a topic or initiative; above it, sleep splits it
+JOIN_MINUTES = 20  # a capture written this soon after the last one of the same area, origin and mode joins it
+JOIN_LINES = 40  # ... while that capture has fewer lines than this
+ARCHIVE = "archive"  # <root>/archive/<area>/<YYYY-MM>/: consolidated captures, the raw layer; never loaded
 CURRENCIES = ("R$", "US$", "$", "€", "£")
 # Literals consolidation tends to lose: amounts, code, links, issues and PRs, dates, numbers
 LITERAL = re.compile(r"(?:R\$|US\$|\$|€|£)\s?\d[\d.,]*|`[^`\n]{2,80}`|https?://[^\s)>\]]+|\b[\w.-]+/[\w.-]+#\d+|#\d{2,}"
@@ -150,7 +157,7 @@ EVERY = re.compile(r"^(?:([1-9][0-9]{0,2})\s+)?(day|week|month|year)s?$")  # n =
 NOT_DONE = re.compile(r"^- (?:feito|feita|conclu[ií]d[oa]|pront[oa]|finished|completed)\s*:", re.I)  # the marker is "Done:"
 DROPPED = re.compile(r"^- dropped\b", re.I)
 MARKERS = r"fact|{name}|inherited|hypothesis|recommendation"
-WITH_AREA = ("validate", "state", "opening", "overview", "review", "index", "context", "search", "fidelity", "digest", "archive", "capture")
+WITH_AREA = ("validate", "state", "opening", "overview", "review", "index", "context", "search", "fidelity", "digest", "archive", "capture", "keep", "health")
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z]{2,4})?")
@@ -768,15 +775,20 @@ def validate(root, area):
                 errors.append(f"{slug}: superseded without superseded_by")
             if not re.match(r"^\d{4}-\d{2}(-\d{2})?-", slug):
                 errors.append(f"{slug}: name without a date at the start")
-            review = iso_date(meta.get("review_on"))
+            review_on = str(meta.get("review_on") or "").strip()
+            review = iso_date(review_on)
+            if review_on and not review and review_on != "none":
+                errors.append(f"{slug}: review_on must be YYYY-MM-DD or none ({review_on})")
+            if status == "approved" and not review_on:
+                warnings.append(ForSleep("decision without review_on", f"{slug}: approved without review_on; the day its effect can be seen, or none"))
             if review and review <= today and "## Outcome" not in body:
                 warnings.append(f"{slug}: review overdue since {review}")
         elif kind in ("topic", "person"):
             if not iso_date(meta.get("updated")):
                 errors.append(f"{slug}: no updated")
-            n = word_count(body)
-            if kind == "topic" and n > TOPIC_MAX:
-                warnings.append(ForSleep("topic too large to split", f"{slug}: topic with {n} words (limit {TOPIC_MAX}); split into smaller topics joined by links"))
+        if kind in ("topic", "initiative") and word_count(body) > RECORD_MAX:
+            warnings.append(ForSleep("record too large to split", f"{slug}: {kind} with {word_count(body)} words (limit {RECORD_MAX}); "
+                                     "split: the detail goes to topics joined by links, the record keeps the present"))
         for line in section(body, "Open"):
             if not PARKED.search(line) and clean(line[2:]).lower() not in EMPTY:
                 warnings.append(ForSleep("open line without since", f"{slug}: '## Open' line without '| since', so the weekly review misses it: '{clean(line[2:])[:50]}'"))
@@ -1912,6 +1924,49 @@ def capture_problems(body):
     return problems
 
 
+def capture_parts(body):
+    """A capture body by section, in order; lines before the first heading under ""."""
+    parts, at = {"": []}, ""
+    for l in body.strip().split("\n"):
+        m = re.match(r"^#+ *(.*?)\s*$", l)
+        if m:
+            at = m.group(1)
+            parts.setdefault(at, [])
+        elif l.strip():
+            parts[at].append(l)
+    return parts
+
+
+def joined(old, new):
+    """Two capture bodies as one: each section's lines in the order they were said; a `## Thread` line replaces the
+    older one on the same topic. Nothing else is dropped, a section outside the template included."""
+    a, b = capture_parts(old), capture_parts(new)
+    topic = lambda l: fold(l[2:].split(":", 1)[0]).strip()
+    out = a[""] + b[""]
+    for t in list(CAPTURE_SECTIONS) + [t for t in dict.fromkeys(list(a) + list(b)) if t and t not in CAPTURE_SECTIONS]:
+        lines = a.get(t, []) + b.get(t, [])
+        if t == "Thread":
+            newer = {topic(l) for l in b.get(t, [])}
+            lines = [l for l in a.get(t, []) if topic(l) not in newer] + b.get(t, [])
+        if lines:
+            out += [f"## {t}"] + lines
+    return "\n".join(out)
+
+
+def join_target(root, folder, origin, forget):
+    """The capture a new one joins: the newest in the inbox, of the same origin and mode, written under JOIN_MINUTES
+    ago and short enough, while no sleep runs (sleep fixes its list at the start: a line joined to a file on it would
+    leave the inbox unconsolidated). One stretch of conversation, one capture, without depending on the agent."""
+    if (root / "SLEEP-IN-PROGRESS.md").exists():
+        return None
+    files = sorted(folder.glob("*.md"), key=lambda f: f.stat().st_mtime)
+    if not files or dt.datetime.now().timestamp() - files[-1].stat().st_mtime > JOIN_MINUTES * 60:
+        return None
+    meta, _ = read(files[-1])
+    same = meta.get("type") == "capture" and meta.get("origin") == origin and meta.get("mode") == ("forget" if forget else "normal")
+    return files[-1] if same and len(text_of(files[-1]).split("\n")) < JOIN_LINES else None
+
+
 def write_capture(root, area, origin, topic, body, forget=False):
     """Writes a capture from its body: names the file, stamps the time to the second, so sessions in the same minute
     keep their order, and never overwrites another session's file. Refuses what capture_problems finds: nothing is
@@ -1926,6 +1981,13 @@ def write_capture(root, area, origin, topic, body, forget=False):
     slug = re.sub(r"[^a-z0-9]+", "-", fold(topic))[:60].strip("-") or "capture"
     folder = root / "inbox" / area.name
     folder.mkdir(parents=True, exist_ok=True)
+    last = join_target(root, folder, origin, forget)
+    if last:
+        text = text_of(last)
+        end = text.index("\n---", 3) + 4
+        last.write_text(text[:end] + "\n" + joined(text[end:], body) + "\n", encoding="utf-8")
+        print(f"joined to inbox/{area.name}/{last.name} (same stretch: same origin, under {JOIN_MINUTES} minutes)")
+        return 0
     head = (f"---\ntype: capture\narea: {area.name}\ndate: {stamp:%Y-%m-%dT%H:%M:%S}\norigin: {origin}\n"
             f"mode: {'forget' if forget else 'normal'}\n---\n")
     n = 1
@@ -1939,6 +2001,82 @@ def write_capture(root, area, origin, topic, body, forget=False):
             n += 1
     print(f"written inbox/{area.name}/{f.name}")
     return 0
+
+
+def keep(root, area, names):
+    """Sleep's last step: moves each consolidated capture from the inbox to archive/<area>/<YYYY-MM>/, the raw layer a
+    later sleep or reviewer rereads to check a record against what was said. A `mode: forget` capture is deleted
+    instead: it names what to erase. Only inbox captures move; nothing in the archive is overwritten."""
+    inbox, moved, deleted, bad = {f.name: f for f in area.inbox}, 0, 0, 0
+    for n in names:
+        f = inbox.get(Path(n).name)
+        if not f:
+            print(f"{n}: not a capture in inbox/{area.name}/")
+            bad += 1
+            continue
+        meta, _ = read(f)
+        if meta.get("mode") == "forget":
+            f.unlink()
+            deleted += 1
+            continue
+        day = iso_date(str(meta.get("date", ""))) or dt.date.fromtimestamp(f.stat().st_mtime)
+        dest = root / ARCHIVE / area.name / day.strftime("%Y-%m")
+        dest.mkdir(parents=True, exist_ok=True)
+        target, k = dest / f.name, 2
+        while target.exists():
+            target, k = dest / f"{f.stem}-{k}{f.suffix}", k + 1
+        f.rename(target)
+        moved += 1
+    print(f"{moved} capture(s) to {ARCHIVE}/{area.name}/, {deleted} forget capture(s) deleted")
+    return 1 if bad else 0
+
+
+def raw(root, area):
+    """The area's archived captures, newest first."""
+    return sorted((root / ARCHIVE / area.name).rglob("*.md"), reverse=True)
+
+
+# ---------- health ----------
+
+def health(root, names):
+    """How the memory is growing, by layer (raw, curated, generated, injected), and the signs it is decaying: records
+    over the limit, decisions without review, stale initiatives, captures in pieces. For whoever maintains the system;
+    the assistant and sleep don't read it."""
+    today = local_today()
+    words = lambda files: sum(word_count(read(f)[1]) for f in files if f.exists())
+    out = [f"# Health of the memory, {today}"]
+    for n in names:
+        area = Area(root, n)
+        recs = [f for f, _, _ in area.records.values()]
+        curated = recs + [area.folder / x for x in ("BOARD.md", "LOG.md", "AREA.md")] + sorted((area.folder / "log").glob("*.md"))
+        archived = raw(root, area)
+        recent = [f for f in archived if iso_date(f"{f.name[:4]}-{f.name[4:6]}-{f.name[6:8]}") and
+                  (today - iso_date(f"{f.name[:4]}-{f.name[4:6]}-{f.name[6:8]}")).days <= DAYS_LOG]
+        lines = [len([l for l in read(f)[1].split("\n") if l.startswith("- ")]) for f in recent]
+        try:
+            injected = len(opening(root, area).split()) if n != "core" else 0
+        except Exception:
+            injected = -1
+        decisions = [(m, b) for _, m, b in area.records.values() if m.get("type") == "decision" and m.get("status") == "approved"]
+        dated = sum(1 for m, _ in decisions if iso_date(m.get("review_on")))
+        none = sum(1 for m, _ in decisions if str(m.get("review_on") or "").strip() == "none")
+        outcomes = sum(1 for _, b in decisions if "## Outcome" in b)
+        big = [f"{s} ({word_count(b)})" for s, (_, m, b) in area.records.items()
+               if m.get("type") in ("topic", "initiative") and word_count(b) > RECORD_MAX]
+        stale = [s for s, (_, m, _) in area.records.items() if m.get("type") == "initiative" and m.get("status") == "active"
+                 and iso_date(m.get("verified")) and (today - iso_date(m.get("verified"))).days > DAYS_STALE]
+        out += [f"## {n}",
+                f"- words: raw {words(archived)} ({len(archived)} captures) | curated {words(curated)} ({len(recs)} records)"
+                f" | generated {words([area.folder / 'STATE.md'])} | injected (opening) {injected}",
+                f"- captures: {len(area.inbox)} in the inbox, {len(recent)} archived in {DAYS_LOG} days"
+                + (f", {sum(lines) / len(lines):.1f} lines each" if lines else ""),
+                f"- approved decisions: {len(decisions)}, review_on dated {dated}, none {none}, missing "
+                f"{len(decisions) - dated - none}, with outcome {outcomes}",
+                f"- over {RECORD_MAX} words: {', '.join(big) or 'none'}",
+                f"- active initiatives verified over {DAYS_STALE} days ago: {', '.join(stale) or 'none'}"]
+    body = read(root / "core" / "PRINCIPLES.md")[1] if (root / "core" / "PRINCIPLES.md").exists() else ""
+    out += [f"## core", f"- principles: {sum(1 for l in body.split(chr(10)) if l.startswith('- '))} line(s)"]
+    return "\n".join(out)
 
 
 # ---------- new memory and areas ----------
@@ -2065,6 +2203,8 @@ def search(root, names, terms):
     frontmatter only `title`, and no headings (`type: decision` and `## Decision` would match every decision).
     STATE.md and CHANGELOG.md stay out (generated, history).
     Pending captures first, newest on top; then each file with its matching lines."""
+    with_raw = "--raw" in terms
+    terms = [t for t in terms if t != "--raw"]
     patterns = [re.compile(r"\b" + r"\s+".join(re.escape(stem(w)) for w in plain(t).split())) for t in terms if plain(t).split()]
     if not patterns:
         print(__doc__)
@@ -2074,6 +2214,7 @@ def search(root, names, terms):
     for n in names:
         files += sorted((root / "areas" / n).rglob("*.md"))
     files += sorted((root / "core").rglob("*.md"))
+    files += [f for n in names + ["core"] for f in raw(root, Area(root, n))] if with_raw else []
     found = 0
     for f in dict.fromkeys(files):
         if f.name in ("STATE.md", "CHANGELOG.md"):
@@ -2158,7 +2299,7 @@ def fidelity(root, area, names):
     compact = re.sub(r"[^\S\n]", "", corpus)  # lines stay apart: "R$ 34." is not "R$ 34.12" with the next line
     history = "\n".join(l for f in (area.folder / "CHANGELOG.md", root / "core" / "CHANGELOG.md") if f.exists()
                         for l in text_of(f).split("\n") if not l.startswith("#"))  # headings carry sleep's dates
-    everywhere = corpus + "\n" + history
+    everywhere = corpus + "\n" + history + "\n" + "\n".join(text_of(f) for f in raw(root, area))
     missing = 0
     in_inbox = {f.name for f in area.inbox + Area(root, "core").inbox}
     before = sorted(n for n in names if Path(n).name not in in_inbox)
@@ -2274,13 +2415,13 @@ def main(argv):
             print(__doc__)
             return 2
         return new_area(root, argv[3], argv[4:])
-    if cmd in ("state", "opening", "overview", "review", "index", "context", "fidelity", "person", "digest", "archive") and len(argv) < (5 if cmd == "context" else 4):
+    if cmd in ("state", "opening", "overview", "review", "index", "context", "fidelity", "person", "digest", "archive", "keep") and len(argv) < (5 if cmd in ("context", "keep") else 4):
         print(__doc__)
         return 2
     if cmd == "capture" and len(argv) < 6:
         print(__doc__)
         return 2
-    if cmd in WITH_AREA and len(argv) > 3 and not argv[3].startswith("--") and not (cmd in ("validate", "review", "search") and argv[3] == "all"):
+    if cmd in WITH_AREA and len(argv) > 3 and not argv[3].startswith("--") and not (cmd in ("validate", "review", "search", "health") and argv[3] == "all"):
         argv[3] = area_from_argument(root, argv[3])
     if cmd in ("state", "opening", "overview", "review") and argv[3] == "core":
         print(f"{cmd} is per area" + (" (or all)" if cmd == "review" else "; core/STATE.md comes from: memory.py core <root> --write"))
@@ -2366,6 +2507,11 @@ def main(argv):
         return write_capture(root, Area(root, argv[3]), argv[4], argv[5], sys.stdin.read() if sys.stdin else "", "--forget" in argv)
     if cmd == "digest":
         print(digest(root, Area(root, argv[3])))
+        return 0
+    if cmd == "keep":
+        return keep(root, Area(root, argv[3]), argv[4:])
+    if cmd == "health":
+        print(health(root, areas(root) if len(argv) < 4 or argv[3] == "all" else [argv[3]]))
         return 0
     if cmd == "archive":
         print(f"{archive_log(Area(root, argv[3]), local_today())} LOG entries moved to log/")
