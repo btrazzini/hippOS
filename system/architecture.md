@@ -8,7 +8,7 @@ hippOS follows the layer model Anthropic describes in "The components of agent m
 
 | Layer | In hippOS | Written by | Read by |
 |---|---|---|---|
-| Raw | `inbox/<area>/` (pending), `archive/<area>/<YYYY-MM>/` (consolidated) | the assistant, during the conversation (`memory.py capture`) | sleep; a reviewer or `memory.py search --raw` checking a record against what was said |
+| Raw | `inbox/<area>/` (pending), `archive/<area>/<YYYY-MM>/` (consolidated) | the assistant, during the conversation (`memory.py capture`) | sleep, through `memory.py origin` when a capture contradicts a record; `memory.py search --raw` on request |
 | Notes | `initiatives/`, `decisions/`, `topics/`, `core/people/`, `BOARD.md`, `LOG.md`, `log/`, `core/PREFERENCES.md`, `core/PRINCIPLES.md` | sleep only | the assistant, on demand (`context`, `search`) |
 | Representations | `STATE.md`, `core/STATE.md`, `MAP.md`, `WATCH.md` | code (`memory.py state`, `core`; `lookup.py watch`), at the end of each sleep | the assistant at startup in connector mode; tools |
 | Injected | the opening (`lookup.py opening`) | code, computed at session start | the assistant's first reply |
@@ -16,7 +16,8 @@ hippOS follows the layer model Anthropic describes in "The components of agent m
 Rules that follow from the table:
 - The injected layer is assembled by code from the notes; its only model-written part is the board's `## Attention`, which sleep writes and caps at five lines. It stays small by construction (`NOW_ITEMS`, `BLOCK_ITEMS`, `ATTENTION_MAX`): what doesn't fit is one `context` or `search` away. The ceiling Claude Code's auto memory uses for the same layer is 200 lines or 25 KB; the opening stays well below.
 - Notes are not a diary. State is written in the present; history lives in `CHANGELOG.md`, in the raw layer and in Drive versions. What a source tells again (git, gh, a repository) is a pointer, not a copy: copied state goes stale silently, and stale notes made agents worse than no notes in Anthropic's experiments.
-- The raw layer is kept. Dreaming in Anthropic's work corrects a note by reading the transcript it came from; without the transcript, an error made in one consolidation is permanent. `archive/` is never loaded at startup, so it costs nothing per session.
+- The raw layer is kept. Dreaming in Anthropic's work corrects a note by reading the transcript it came from; without the transcript, an error made in one consolidation is permanent. `archive/` is never loaded at startup and stays out of `MAP.md`, so it costs nothing per session, and the assistant never mistakes an old capture for the current state.
+- The raw layer is read where an error shows, not on a schedule. When a capture contradicts a record, sleep runs `memory.py origin` to see what was actually said about it: a record that misstated it is restored, and the CHANGELOG says so; a faithful record changes only by the person's word, and any other source becomes a question. Rechecking every note against its source every night would cost far more and, in Anthropic's experience, isn't practical. In connector mode (sleep in the cloud, without the synced folder) the work copy holds only `archive/`'s folders, so `origin` finds nothing and sleep decides as it did before the archive; the check runs in local mode, where scheduled sleep runs.
 
 ## The cycle
 
@@ -57,7 +58,7 @@ Sources (read on 2026-11-26):
 
 Taken:
 - Layers with one writer each, and a small injected layer computed from the ones below.
-- Keeping the raw layer (`archive/`), so notes can be checked against what was said.
+- Keeping the raw layer (`archive/`), and checking a note against it when a capture contradicts the note (`memory.py origin`).
 - Storing only what the environment won't show again; pointers instead of copies.
 - Telling the model what memory is for rather than narrow rules on what to record (a "record only failures" rule lowered scores in Anthropic's tests). Capture stays broad; sleep judges.
 - Unresolved conflicts surfaced, not guessed; a passing remark never overrides a decision.

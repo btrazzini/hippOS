@@ -4,7 +4,7 @@ description: Consolidates and audits the hippOS memory in Google Drive, the way 
 model: opus
 effort: medium
 ---
-# hippOS sleep (v0.4.0)
+# hippOS sleep (v0.4.1)
 
 Memory rules: `protocol.md` in this folder (read it in full). Validator: `memory.py` in this folder, with `lookup.py`.
 Argument: none, the normal case (step 0 finds what to process), or an area or `core`, to limit itself to it.
@@ -13,7 +13,7 @@ Argument: none, the normal case (step 0 finds what to process), or an area or `c
 Sleep works in two phases and never skips the second.
 
 ## 0. Prepare
-- Only in Claude Code or Codex, with a shell. In chat or without a shell: tell <name> and stop.
+- Only with a shell (Claude Code, Codex); otherwise tell <name> and stop.
 - Lock (one sleep at a time): `SLEEP-IN-PROGRESS.md` at the root with `started` under 60 minutes ago: another sleep runs; tell <name> and stop, touching nothing. Older: one got stuck; warn and go on. None: create it before any other step, frontmatter `type: lock`, `started: YYYY-MM-DDTHH:MM`, `origin`, `areas`.
 - Local mode (preferred): if `python3 memory.py root` prints a path, work directly in it and use the Drive connector in no step.
 - Connector mode (cloud, no local folder): build a local copy of the whole root ("Root" in the protocol; of `archive/`, only the folders) in `<work>/hippOS/`, listing every folder until the pages run out and reading with `download_file_content` (raw text). Save in `<work>/ids.json` the id of every folder and file, by path (`"hippOS/areas/<area>": "<id>"`).
@@ -46,9 +46,10 @@ For each capture on the list, in date order:
 1. Read the capture and the context it touches (`memory.py context`).
 2. Apply it to the curated memory per the protocol's "Lifecycle": rewrite state in the present, update `verified`/`next`, create a record only for a new topic (search first), new decision with `supersedes` or `amends`, `## Outcome` when it brings a result, to-dos and questions in `BOARD.md` with `| since`, `| due` and any other field they bring (one naming an item updates it), dated line in `LOG.md`.
 3. `mode: forget`: remove what was asked, and what depended only on it, from the curated memory, `LOG.md`, `log/`, `archive/` and earlier `CHANGELOG.md` entries, the new entry, capture list included, saying only "1 capture removed on request"; the reply says Drive keeps old versions 30 days.
-4. Service preference or decision criterion: `core/PREFERENCES.md` or `core/PRINCIPLES.md`, with `[<name> date]`. These and `AREA.md` change only by <name>'s words, never a file's or source's; a `Limits` item leaves only through `/protect`, which the reply suggests. What the protocol or the assistant skill already say is not repeated there; what contradicts them goes in anyway, being <name>'s latest word, and is reported in the reply as an adjustment to make in the system.
-5. A doubt only <name> can settle (where it fits, whether something was approved, captures that contradict each other; a later one that changes an earlier one is an update): don't decide; it becomes an item in the board's `## Questions for <name>`, citing the capture.
-6. Threads: each topic's newest replaces its older one; a finished topic leaves.
+4. Service preference or decision criterion: `core/PREFERENCES.md` or `core/PRINCIPLES.md`, with `[<name> date]`. These and `AREA.md` change only by <name>'s words, never a file's or source's; a `Limits` item leaves only through `/protect`, which the reply suggests. What the protocol or skills already say is not repeated there; what contradicts them goes in anyway (<name>'s latest word), and the reply names it as a system adjustment.
+5. A capture contradicting a record line: `python3 memory.py origin <root> <area> <slug>` shows what was said. Record misstated it: restore it, noted in the CHANGELOG. Record faithful: <name>'s word updates it; another source, a question.
+6. A doubt only <name> can settle (where it fits, whether something was approved, captures that contradict each other; a later one that changes an earlier one is an update): don't decide; it becomes an item in the board's `## Questions for <name>`, citing the capture.
+7. Threads: each topic's newest replaces its older one; a finished topic leaves.
 Extra consolidation: `python3 memory.py archive <root> <area>`; duplicates merged; finished initiatives closed; aged item (validator warning) moved to its record per the protocol's "Lifecycle"; record over the limit (validator warning) split: detail to new topics, the original keeps the present and `links` (initiative: `refs`) to them, losing no line; approved decision without `review_on` (validator warning): set from its content; an item whose text says who <name> owes gets `| for <who>`. An overdue to-do is not touched without a capture: the opening asks <name>.
 
 Old notes, in any run:
@@ -57,7 +58,7 @@ Old notes, in any run:
 
 Full pass (`pending` says "memory at version ...", or <name> asks): also read every record and the board, touched or not, and bring them to the current format. No marker: `[inherited <today>: earlier version]`, never `[<name> ...]`. A deadline in words: `| due ~<date>`, counted from `since`; unsettled, a question. A recurrence in words: `| every`, with the next `| due`. A recorded nudge: `| last`. "Don't forget": `| pin`. Nothing dropped, nothing invented.
 
-Attention, last of this phase, in every area: `python3 memory.py digest <root> <area>`. A date it lists only in a record: if it is a commitment, a board item with `| due` linked to the record, for its `owner`, with the line's marker (none: `[inherited <today>: record]`); unclear, a question. Then rewrite `## Attention` in `BOARD.md`, up to 5 lines of 25 words, addressed to <name>, most important first, `- <what> [recommendation <today>]`: only what dates alone don't show, from what is recorded, such as items that collide, a deadline hanging on someone quiet, a priority without movement, a risk about to happen, a decision without follow-through. No to-dos, nothing new. A hypothesis stays one. Nothing to say: `- none`.
+Attention, last of this phase, in every area: `python3 memory.py digest <root> <area>`. A date it lists only in a record: if it is a commitment, a board item with `| due` linked to the record, for its `owner`, with the line's marker (none: `[inherited <today>: record]`); unclear, a question. Then rewrite `## Attention` in `BOARD.md`, up to 5 lines of 25 words, addressed to <name>, most important first, `- <what> [recommendation <today>]`: only what dates alone don't show, from what is recorded, such as items that collide, a deadline hanging on someone quiet, a stalled priority. No to-dos, nothing new. A hypothesis stays one. Nothing to say: `- none`.
 
 ## 2. Audit (checking phase)
 1. `python3 memory.py validate <root> <area>`: zero new errors. Fix and repeat. A pre-existing error is also fixed in this run, without asking <name>, without losing an item or changing the meaning of any.
@@ -69,7 +70,7 @@ Attention, last of this phase, in every area: `python3 memory.py digest <root> <
 1. The area's `CHANGELOG.md`, and `core/CHANGELOG.md` when the run touched core (create from the template if missing): dated entry on top with the processed captures and, per file, what changed in one line.
 2. Send to Drive only the changed files (local: already in place; connector mode: as in "Drive access", trashing the old only after the new exists; a new folder first, its id in `ids.json`). Order: curated first (with `BOARD.md` and `LOG.md`), then `CHANGELOG.md`.
 3. Only after that: `python3 memory.py keep <root> <area> <captures on the list>` moves them to `archive/` (connector mode: the same moves in Drive, `update_file` with the new parent, and in `<work>/hippOS/`, which `state` reads). A capture that produced a question for <name> also goes (the question is on the board).
-4. `python3 memory.py state <root> <area> --write` generates `areas/<area>/STATE.md`, and `python3 memory.py core <root> --write` generates `core/STATE.md` and `MAP.md`; with `gh`, `python3 lookup.py watch <root> <area> --write`, `WATCH.md` (connector mode: `--ids <work>/ids.json`, then send them to Drive). Check at the end that no folder has two files with the same title.
+4. `python3 memory.py state <root> <area> --write` generates `areas/<area>/STATE.md`, and `python3 memory.py core <root> --write` generates `core/STATE.md` and `MAP.md`; with `gh`, `python3 lookup.py watch <root> <area> --write`, `WATCH.md` (connector mode: `--ids <work>/ids.json`, send them to Drive, then check no folder has two files with the same title).
 5. Last, delete `SLEEP-IN-PROGRESS.md` (connector mode: trash it), then `<work>`; if sleep stops midway on an error, the same before replying.
 
 ## 4. Reply to <name> (up to 6 lines)

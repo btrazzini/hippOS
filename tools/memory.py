@@ -28,6 +28,7 @@ of core/PROFILE.md (`name`, `timezone`).
   digest   <root> <area>                 the area on one screen, for sleep to write ## Attention
   archive  <root> <area>                 moves LOG.md entries over 30 days old to log/<YYYY-MM>.md
   keep     <root> <area> <capture ...>   sleep's last step: consolidated captures to archive/<area>/<YYYY-MM>/ (raw layer)
+  origin   <root> <area> <slug>          what archived captures said about a record (for sleep, when one contradicts it)
   health   <root> [area|all]             growth by layer and signs of decay (records over the limit, decisions without review)
   capture  <root> <area> <origin> <topic> [--forget]   writes a capture from stdin; refuses malformed fields; joins
                                          the capture of the same stretch (same origin and mode, under 20 minutes)
@@ -44,7 +45,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 TZ = dt.datetime.now().astimezone().tzinfo  # TZ, NAME, MARKER and NOTATION: configure(), from PROFILE.md
 NAME = "owner"
 SPEAKS = "en"  # the owner's `language`; what memory.py prints is in English and the agent translates it
@@ -157,7 +158,7 @@ EVERY = re.compile(r"^(?:([1-9][0-9]{0,2})\s+)?(day|week|month|year)s?$")  # n =
 NOT_DONE = re.compile(r"^- (?:feito|feita|conclu[ií]d[oa]|pront[oa]|finished|completed)\s*:", re.I)  # the marker is "Done:"
 DROPPED = re.compile(r"^- dropped\b", re.I)
 MARKERS = r"fact|{name}|inherited|hypothesis|recommendation"
-WITH_AREA = ("validate", "state", "opening", "overview", "review", "index", "context", "search", "fidelity", "digest", "archive", "capture", "keep", "health")
+WITH_AREA = ("validate", "state", "opening", "overview", "review", "index", "context", "search", "fidelity", "digest", "archive", "capture", "keep", "health", "origin")
 TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z]{2,4})?")
@@ -1681,7 +1682,8 @@ def core_state(root, ids):
         aliases = as_list(r[0].get("aliases")) if r else []
         map_.append(f"- {n}" + (f" (aliases: {', '.join(aliases)})" if aliases else ""))
     map_ += ["", "## Folders"]
-    map_ += [f"- {path}: {fid}" for path, fid in sorted(ids.items())] or ["- (ids not provided)"]
+    # archive/ stays out: the assistant never reads the raw layer, and sleep takes those ids from its own listing
+    map_ += [f"- {path}: {fid}" for path, fid in sorted(ids.items()) if path.split("/")[1:2] != [ARCHIVE]] or ["- (ids not provided)"]
     return state, "\n".join(map_) + "\n"
 
 
@@ -2034,6 +2036,27 @@ def keep(root, area, names):
 def raw(root, area):
     """The area's archived captures, newest first."""
     return sorted((root / ARCHIVE / area.name).rglob("*.md"), reverse=True)
+
+
+def origin(root, area, slug):
+    """What was said about a record, from the raw layer: each archived capture line citing [[slug]], oldest first, with
+    the capture's date. For sleep, when a capture contradicts the record: a record that misstated what was said is
+    restored; one that holds it faithfully is updated only by the owner's word, otherwise it becomes a question."""
+    if slug not in area.records and not exists(root, area, slug):
+        print(f"{slug}: no such record in {area.name}")
+        return 2
+    cite = re.compile(r"\[\[(?:[\w-]+:)?" + re.escape(slug) + r"\]\]")
+    found = 0
+    for f in sorted(raw(root, area)):
+        meta, body = read(f)
+        lines = [l for l in body.split("\n") if cite.search(l)]
+        if lines:
+            print(f"== {f.relative_to(root)} ({meta.get('date', '')})")
+            print("\n".join(lines))
+            found += len(lines)
+    print(f"{found} line(s) citing [[{slug}]] in {ARCHIVE}/{area.name}/" +
+          ("" if found else "; none: decide as before the archive, by the record's markers"))
+    return 0
 
 
 # ---------- health ----------
@@ -2415,7 +2438,7 @@ def main(argv):
             print(__doc__)
             return 2
         return new_area(root, argv[3], argv[4:])
-    if cmd in ("state", "opening", "overview", "review", "index", "context", "fidelity", "person", "digest", "archive", "keep") and len(argv) < (5 if cmd in ("context", "keep") else 4):
+    if cmd in ("state", "opening", "overview", "review", "index", "context", "fidelity", "person", "digest", "archive", "keep", "origin") and len(argv) < (5 if cmd in ("context", "keep", "origin") else 4):
         print(__doc__)
         return 2
     if cmd == "capture" and len(argv) < 6:
@@ -2510,6 +2533,8 @@ def main(argv):
         return 0
     if cmd == "keep":
         return keep(root, Area(root, argv[3]), argv[4:])
+    if cmd == "origin":
+        return origin(root, Area(root, argv[3]), argv[4])
     if cmd == "health":
         print(health(root, areas(root) if len(argv) < 4 or argv[3] == "all" else [argv[3]]))
         return 0

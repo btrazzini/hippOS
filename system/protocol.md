@@ -1,6 +1,6 @@
 ---
 type: protocol
-version: 0.4.0
+version: 0.4.1
 ---
 # hippOS memory protocol
 
@@ -35,7 +35,7 @@ hippOS/
     topics/<slug>.md
     drafts/<slug>.md       texts in progress; not a source of state
   inbox/<area>/            raw captures; `inbox/core/` for what applies to every area
-  archive/<area>/<YYYY-MM>/  consolidated captures (raw layer): never loaded; reread to check a record against what was said
+  archive/<area>/<YYYY-MM>/  consolidated captures (raw layer); never loaded
 ```
 Area = folder in `areas/`. Slug = file name without `.md`, unique within the area. Reference in the body with `[[slug]]`; in frontmatter, lists without double brackets. Reference to another area (or core): `[[area:slug]]`.
 
